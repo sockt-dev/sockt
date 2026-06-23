@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "file",
+        "image",
+        "link"
+      ]
+    },
+    "url": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "mimeType": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "url"
+  ],
+  "additionalProperties": false
+}
