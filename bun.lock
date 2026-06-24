@@ -14,6 +14,14 @@
         "typescript": "^5",
       },
     },
+    "packages/cadvp": {
+      "name": "@sockt/cadvp",
+      "version": "0.0.1",
+      "dependencies": {
+        "@sockt/memory": "workspace:*",
+        "@sockt/types": "workspace:*",
+      },
+    },
     "packages/fsm": {
       "name": "@sockt/fsm",
       "version": "0.0.1",
@@ -98,6 +106,8 @@
     "@humanwhocodes/retry": ["@humanwhocodes/retry@0.4.3", "", {}, "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
+
+    "@sockt/cadvp": ["@sockt/cadvp@workspace:packages/cadvp"],
 
     "@sockt/fsm": ["@sockt/fsm@workspace:packages/fsm"],
 
