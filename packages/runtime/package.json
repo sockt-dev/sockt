@@ -1,0 +1,23 @@
+{
+  "name": "@sockt/runtime",
+  "version": "0.0.1",
+  "type": "module",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sockt/types": "workspace:*",
+    "ai": "^4.0",
+    "@ai-sdk/anthropic": "^1.0",
+    "@ai-sdk/openai": "^1.0"
+  }
+}
