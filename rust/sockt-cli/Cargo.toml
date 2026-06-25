@@ -1,0 +1,71 @@
+[package]
+name = "sockt-cli"
+version = "0.1.0"
+edition = "2026"
+description = "Sockt AI Operations Agent — CLI"
+license = "FSL-1.1-MIT"
+
+[[bin]]
+name = "sockt"
+path = "src/main.rs"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Docker
+bollard = { version = "0.18", default-features = false, features = ["ssl"] }
+async-trait = "0.1"
+
+# Encryption
+age = { version = "0.11", features = ["armor"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+
+# HTTP
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+
+# Interactive (fallback)
+dialoguer = "0.11"
+indicatif = "0.17"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utils
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+dirs = "6"
+thiserror = "2"
+anyhow = "1"
+secrecy = "0.10"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+insta = { version = "1", features = ["yaml"] }
+mockall = "0.13"
+wiremock = "0.6"
+rstest = "0.23"
+tokio-test = "0.4"
+proptest = "1"
+rand = "0.8"
+
+[features]
+docker-tests = []
+

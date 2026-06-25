@@ -15,7 +15,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "workspace:*",
-    "@sockt/memory": "workspace:*"
+    "@sockt/types": "workspace:*"
   }
 }

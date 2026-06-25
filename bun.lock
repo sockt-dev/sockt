@@ -18,7 +18,6 @@
       "name": "@sockt/cadvp",
       "version": "0.0.1",
       "dependencies": {
-        "@sockt/memory": "workspace:*",
         "@sockt/types": "workspace:*",
       },
     },
