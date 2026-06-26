@@ -96,8 +96,8 @@ mod tests {
     #[test]
     fn local_tier_includes_required_services() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn local_tier_excludes_proxy() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -123,8 +123,8 @@ mod tests {
     #[test]
     fn cloud_tier_also_includes_core_services() {
         let config = cloud_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -135,8 +135,8 @@ mod tests {
     #[test]
     fn enterprise_tier_generates_valid_compose() {
         let config = enterprise_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
         ComposeGenerator::validate(&yaml).unwrap();
     }
 
@@ -145,8 +145,8 @@ mod tests {
     #[test]
     fn generated_yaml_is_valid() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         ComposeGenerator::validate(&yaml).unwrap();
     }
@@ -159,8 +159,8 @@ mod tests {
                 deployment_id: "test".to_string(),
                 ..Default::default()
             };
-            let gen = ComposeGenerator::new(&config);
-            let yaml = gen.generate().unwrap();
+            let generator = ComposeGenerator::new(&config);
+            let yaml = generator.generate().unwrap();
             ComposeGenerator::validate(&yaml).expect("invalid YAML for tier");
         }
     }
@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn services_have_depends_on() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let orch = &parsed["services"]["sockt-orch"];
@@ -187,8 +187,8 @@ mod tests {
     #[test]
     fn orch_depends_on_gbrain_healthy() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let dep = &parsed["services"]["sockt-orch"]["depends_on"]["gbrain"]["condition"];
@@ -198,8 +198,8 @@ mod tests {
     #[test]
     fn agent_depends_on_orch_healthy() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let dep = &parsed["services"]["sockt-agent"]["depends_on"]["sockt-orch"]["condition"];
@@ -209,8 +209,8 @@ mod tests {
     #[test]
     fn cadvp_depends_on_gbrain_healthy() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let dep = &parsed["services"]["sockt-cadvp"]["depends_on"]["gbrain"]["condition"];
@@ -225,8 +225,8 @@ mod tests {
             deployment_id: "abcd1234-long-id".to_string(),
             ..Default::default()
         };
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let orch_name = parsed["services"]["sockt-orch"]["container_name"].as_str().unwrap();
@@ -239,8 +239,8 @@ mod tests {
             deployment_id: "ab".to_string(),
             ..Default::default()
         };
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
         ComposeGenerator::validate(&yaml).unwrap();
     }
 
@@ -249,8 +249,8 @@ mod tests {
     #[test]
     fn orch_has_required_env_vars() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let env = parsed["services"]["sockt-orch"]["environment"].as_mapping().unwrap();
@@ -265,8 +265,8 @@ mod tests {
     #[test]
     fn agent_has_required_env_vars() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let env = parsed["services"]["sockt-agent"]["environment"].as_mapping().unwrap();
@@ -280,8 +280,8 @@ mod tests {
     #[test]
     fn cadvp_has_required_env_vars() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let env = parsed["services"]["sockt-cadvp"]["environment"].as_mapping().unwrap();
@@ -302,8 +302,8 @@ mod tests {
             deployment_id: "test".to_string(),
             ..Default::default()
         };
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         assert!(yaml.contains("custom-model-v2"));
         assert!(yaml.contains("fast-model-v1"));
@@ -315,8 +315,8 @@ mod tests {
             deployment_id: "unique-tenant-xyz".to_string(),
             ..Default::default()
         };
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         assert!(yaml.contains("unique-tenant-xyz"));
     }
@@ -326,8 +326,8 @@ mod tests {
     #[test]
     fn volumes_section_exists() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         assert!(parsed["volumes"].is_mapping());
@@ -336,8 +336,8 @@ mod tests {
     #[test]
     fn scratch_volume_defined() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let volumes = parsed["volumes"].as_mapping().unwrap();
@@ -347,8 +347,8 @@ mod tests {
     #[test]
     fn network_defined_with_bridge_driver() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let net = &parsed["networks"]["sockt-net"]["driver"];
@@ -358,8 +358,8 @@ mod tests {
     #[test]
     fn all_services_on_sockt_net() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -378,8 +378,8 @@ mod tests {
     #[test]
     fn orch_has_healthcheck() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let hc = &parsed["services"]["sockt-orch"]["healthcheck"];
@@ -391,8 +391,8 @@ mod tests {
     #[test]
     fn gbrain_has_healthcheck() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let hc = &parsed["services"]["gbrain"]["healthcheck"];
@@ -404,8 +404,8 @@ mod tests {
     #[test]
     fn all_services_have_restart_policy() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -426,8 +426,8 @@ mod tests {
     #[test]
     fn services_use_ghcr_images() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
         let services = parsed["services"].as_mapping().unwrap();
@@ -455,8 +455,8 @@ mod tests {
             deployment_id: "test".to_string(),
             ..Default::default()
         };
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         assert!(yaml.contains("/custom/path/gbrain:/gbrain"));
     }
@@ -466,8 +466,8 @@ mod tests {
     #[test]
     fn snapshot_local_compose() {
         let config = local_config();
-        let gen = ComposeGenerator::new(&config);
-        let yaml = gen.generate().unwrap();
+        let generator = ComposeGenerator::new(&config);
+        let yaml = generator.generate().unwrap();
 
         insta::assert_snapshot!("local_compose", yaml);
     }
