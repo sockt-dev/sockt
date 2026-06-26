@@ -143,7 +143,48 @@ fn collect_interactive(
         .advance()
         .map_err(|e| anyhow::anyhow!("Tier selection: {e}"))?;
 
-    // Step 2: Slack credentials
+    // Step 2: Slack credentials — guided setup
+    let has_app = dialoguer::Confirm::new()
+        .with_prompt("  Do you already have a Slack app configured for Sockt?")
+        .default(false)
+        .interact()
+        .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+    if !has_app {
+        println!();
+        println!("  Let's create your Slack app using a pre-configured manifest.");
+        println!("  This sets up Socket Mode, event subscriptions, and bot scopes automatically.");
+        println!();
+
+        let open_browser = dialoguer::Confirm::new()
+            .with_prompt("  Open Slack app creation page in your browser?")
+            .default(true)
+            .interact()
+            .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+        if open_browser {
+            println!();
+            println!("  Opening Slack...");
+            println!("  Select your workspace and click 'Create' to provision the app.");
+            println!();
+            super::slack_setup::open_creation_page();
+        } else {
+            println!();
+            println!("  To create manually:");
+            println!("  1. Go to https://api.slack.com/apps");
+            println!("  2. Click 'Create New App' > 'From an app manifest'");
+            println!("  3. Select your workspace");
+            println!("  4. Switch to YAML and paste the following manifest:");
+            println!();
+            for line in super::slack_setup::SLACK_MANIFEST.lines() {
+                println!("     {}", line);
+            }
+            println!();
+        }
+
+        super::slack_setup::print_token_instructions();
+    }
+
     loop {
         state.slack_app_token = dialoguer::Password::new()
             .with_prompt("  Slack App Token (xapp-...)")

@@ -4,6 +4,7 @@ mod connect;
 mod down;
 mod export;
 mod init;
+pub(crate) mod slack_setup;
 mod status;
 mod tasks;
 mod up;
