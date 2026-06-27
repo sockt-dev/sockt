@@ -5,6 +5,7 @@ mod config;
 mod crypto;
 mod docker;
 mod gbrain;
+mod runtime;
 mod socket_mode;
 mod tui;
 mod upgrade;
