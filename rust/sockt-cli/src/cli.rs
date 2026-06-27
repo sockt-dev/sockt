@@ -183,6 +183,10 @@ pub enum SetupCommand {
     Slack(SetupSlackArgs),
     /// Configure company context
     Company(SetupCompanyArgs),
+    /// Reconfigure LLM provider and models
+    Llm(SetupLlmArgs),
+    /// Add or reconfigure third-party integrations
+    Integration(SetupIntegrationArgs),
 }
 
 #[derive(Args)]
@@ -224,4 +228,62 @@ pub struct SetupCompanyArgs {
     /// Approval threshold (conservative|balanced|permissive)
     #[arg(long)]
     pub approval: Option<String>,
+}
+
+#[derive(Args)]
+pub struct SetupLlmArgs {
+    /// Skip interactive prompts (use flags/env vars)
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// LLM provider: anthropic|openai|bedrock|custom
+    #[arg(long)]
+    pub provider: Option<String>,
+    /// API key (or env: SOCKT_API_KEY)
+    #[arg(long)]
+    pub api_key: Option<String>,
+    /// Single model ID (auto-splits to frontier+fast)
+    #[arg(long)]
+    pub model: Option<String>,
+    /// Frontier model override
+    #[arg(long)]
+    pub frontier: Option<String>,
+    /// Fast model override
+    #[arg(long)]
+    pub fast: Option<String>,
+    /// Custom endpoint URL (for custom provider)
+    #[arg(long)]
+    pub base_url: Option<String>,
+    /// AWS region (for Bedrock)
+    #[arg(long)]
+    pub aws_region: Option<String>,
+    /// Don't test LLM connectivity
+    #[arg(long)]
+    pub skip_verify: bool,
+}
+
+#[derive(Args)]
+pub struct SetupIntegrationArgs {
+    /// Integration name: github|hubspot|linear|sentry|pagerduty|apollo
+    pub name: String,
+    /// Skip interactive prompts
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// API token/key (or env: SOCKT_<INTEGRATION>_TOKEN)
+    #[arg(long)]
+    pub token: Option<String>,
+    /// API key (alternative to token for some services)
+    #[arg(long)]
+    pub api_key: Option<String>,
+    /// Organization/Portal/Team ID
+    #[arg(long)]
+    pub org_id: Option<String>,
+    /// Sentry DSN (for Sentry integration)
+    #[arg(long)]
+    pub dsn: Option<String>,
+    /// Comma-separated repository list (for GitHub)
+    #[arg(long)]
+    pub repositories: Option<String>,
+    /// Comma-separated service IDs (for PagerDuty)
+    #[arg(long)]
+    pub services: Option<String>,
 }
