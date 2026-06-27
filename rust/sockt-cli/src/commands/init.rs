@@ -392,14 +392,14 @@ async fn collect_interactive(
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
 
-        state.slack_bot_token = dialoguer::Password::new()
-            .with_prompt("  Slack Bot Token (xoxb-...)")
+        state.slack_signing_secret = dialoguer::Password::new()
+            .with_prompt("  Slack Signing Secret")
             .allow_empty_password(true)
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
 
-        state.slack_signing_secret = dialoguer::Password::new()
-            .with_prompt("  Slack Signing Secret")
+        state.slack_bot_token = dialoguer::Password::new()
+            .with_prompt("  Slack Bot Token (xoxb-...)")
             .allow_empty_password(true)
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
@@ -574,15 +574,15 @@ fn encrypt_slack(
 
     let app_token = crypto::encrypt(&tokens.app_token, recipient)
         .context("Encrypting Slack app token")?;
-    let bot_token = crypto::encrypt(&tokens.bot_token, recipient)
-        .context("Encrypting Slack bot token")?;
     let signing_secret = crypto::encrypt(&tokens.signing_secret, recipient)
         .context("Encrypting Slack signing secret")?;
+    let bot_token = crypto::encrypt(&tokens.bot_token, recipient)
+        .context("Encrypting Slack bot token")?;
 
     Ok(SlackConfig {
         app_token,
-        bot_token,
         signing_secret,
+        bot_token,
         socket_mode: true,
     })
 }

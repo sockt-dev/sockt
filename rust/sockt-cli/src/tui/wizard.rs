@@ -25,8 +25,8 @@ pub struct WizardState {
     pub aws_region: String,
     // Slack
     pub slack_app_token: String,
-    pub slack_bot_token: String,
     pub slack_signing_secret: String,
+    pub slack_bot_token: String,
     // Company
     pub company_name: String,
     pub industry: String,
@@ -50,8 +50,8 @@ impl Default for WizardState {
             model_verified: false,
             aws_region: String::new(),
             slack_app_token: String::new(),
-            slack_bot_token: String::new(),
             slack_signing_secret: String::new(),
+            slack_bot_token: String::new(),
             company_name: String::new(),
             industry: String::new(),
             team_size: String::new(),
@@ -129,14 +129,14 @@ impl WizardState {
                         "App token must start with 'xapp-'".to_string(),
                     ));
                 }
-                if !self.slack_bot_token.starts_with("xoxb-") {
-                    return Err(WizardValidationError::InvalidFormat(
-                        "Bot token must start with 'xoxb-'".to_string(),
-                    ));
-                }
                 if self.slack_signing_secret.is_empty() {
                     return Err(WizardValidationError::Required(
                         "signing_secret".to_string(),
+                    ));
+                }
+                if !self.slack_bot_token.starts_with("xoxb-") {
+                    return Err(WizardValidationError::InvalidFormat(
+                        "Bot token must start with 'xoxb-'".to_string(),
                     ));
                 }
                 self.step = WizardStep::CompanyInfo;

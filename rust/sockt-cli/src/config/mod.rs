@@ -81,8 +81,8 @@ impl Default for SocktConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackConfig {
     pub app_token: EncryptedValue,
-    pub bot_token: EncryptedValue,
     pub signing_secret: EncryptedValue,
+    pub bot_token: EncryptedValue,
     #[serde(default = "default_true")]
     pub socket_mode: bool,
 }
