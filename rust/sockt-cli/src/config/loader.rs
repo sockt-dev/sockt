@@ -170,6 +170,7 @@ mod tests {
                 soul_file: "CUSTOM_SOUL.md".to_string(),
                 agents_file: "CUSTOM_AGENTS.md".to_string(),
             },
+            integrations: Default::default(),
         };
 
         loader.save(&config).unwrap();

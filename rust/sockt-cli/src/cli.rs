@@ -135,12 +135,36 @@ pub struct ConfigArgs {
 
 #[derive(Subcommand)]
 pub enum ConfigCommand {
-    /// Show current config
-    Show,
-    /// Set a config value
-    Set { key: String, value: String },
-    /// Get a config value
-    Get { key: String },
+    /// Show current config (default)
+    Show {
+        /// Show decrypted secret values (prompts confirmation)
+        #[arg(long)]
+        reveal: bool,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+        /// Raw YAML file content
+        #[arg(long)]
+        raw: bool,
+    },
+    /// Set a config value using dot-notation
+    Set {
+        key: String,
+        value: String
+    },
+    /// Get a specific value
+    Get {
+        key: String,
+        /// Decrypt if it's a secret
+        #[arg(long)]
+        reveal: bool,
+    },
+    /// Reset a key to its default value
+    Reset {
+        key: String
+    },
+    /// Print the config file path
+    Path,
 }
 
 #[derive(Args)]

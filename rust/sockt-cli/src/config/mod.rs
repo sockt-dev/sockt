@@ -1,4 +1,8 @@
 pub mod loader;
+pub mod dot_path;
+pub mod secrets;
+pub mod accessor;
+pub mod formatter;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -315,6 +319,7 @@ mod tests {
                 aws_region: None,
             },
             gbrain: GBrainConfig::default(),
+            integrations: Default::default(),
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();
