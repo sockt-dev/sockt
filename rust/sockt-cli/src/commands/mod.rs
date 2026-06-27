@@ -4,6 +4,7 @@ mod connect;
 mod down;
 mod export;
 mod init;
+mod secrets;
 mod setup;
 pub(crate) mod slack_setup;
 mod status;
@@ -26,5 +27,6 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Connect(args) => connect::run(args, cli.config).await,
         Command::Upgrade(args) => upgrade_cmd::run(args).await,
         Command::Export(args) => export::run(args, cli.config).await,
+        Command::Secrets(args) => secrets::run(args, cli.config).await,
     }
 }

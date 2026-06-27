@@ -40,6 +40,8 @@ pub enum Command {
     Upgrade(UpgradeArgs),
     /// Export deployment data
     Export(ExportArgs),
+    /// Manage encrypted secrets
+    Secrets(SecretsArgs),
 }
 
 #[derive(Args)]
@@ -310,4 +312,35 @@ pub struct SetupIntegrationArgs {
     /// Comma-separated service IDs (for PagerDuty)
     #[arg(long)]
     pub services: Option<String>,
+}
+
+#[derive(Args)]
+pub struct SecretsArgs {
+    #[command(subcommand)]
+    pub command: SecretsCommand,
+}
+
+#[derive(Subcommand)]
+pub enum SecretsCommand {
+    /// List stored secret names and metadata
+    List,
+    /// Encrypt and store a secret
+    Set {
+        /// Secret name (e.g., anthropic_api_key)
+        name: String,
+        /// Secret value
+        value: String,
+    },
+    /// Re-encrypt all secrets with a fresh key
+    Rotate {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Export secrets in encrypted format
+    Export {
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }

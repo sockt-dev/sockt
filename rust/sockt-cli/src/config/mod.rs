@@ -183,6 +183,8 @@ pub struct EncryptedValue {
     pub ciphertext: String,
     #[serde(default)]
     pub recipient: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub set_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -296,14 +298,17 @@ mod tests {
                 app_token: EncryptedValue {
                     ciphertext: "enc_app".to_string(),
                     recipient: "age1recipient".to_string(),
+                    set_at: None,
                 },
                 bot_token: EncryptedValue {
                     ciphertext: "enc_bot".to_string(),
                     recipient: "age1recipient".to_string(),
+                    set_at: None,
                 },
                 signing_secret: EncryptedValue {
                     ciphertext: "enc_secret".to_string(),
                     recipient: "age1recipient".to_string(),
+                    set_at: None,
                 },
                 socket_mode: true,
             },
@@ -314,6 +319,7 @@ mod tests {
                 api_key: EncryptedValue {
                     ciphertext: "enc_key".to_string(),
                     recipient: "age1recipient".to_string(),
+                    set_at: None,
                 },
                 base_url: None,
                 aws_region: None,
@@ -452,6 +458,7 @@ models:
         let ev = EncryptedValue {
             ciphertext: "AGE_ENCRYPTED_DATA".to_string(),
             recipient: "age1xyz".to_string(),
+            set_at: None,
         };
         let yaml = serde_yaml::to_string(&ev).unwrap();
         assert!(yaml.contains("ciphertext"));
@@ -466,6 +473,36 @@ models:
         let parsed: EncryptedValue = serde_yaml::from_str(&yaml).unwrap();
         assert_eq!(parsed.ciphertext, "");
         assert_eq!(parsed.recipient, "");
+    }
+
+    #[test]
+    fn encrypted_value_with_timestamp_roundtrip() {
+        let ev = EncryptedValue {
+            ciphertext: "test".to_string(),
+            recipient: "age1...".to_string(),
+            set_at: Some("2026-06-27T10:00:00Z".to_string()),
+        };
+        let yaml = serde_yaml::to_string(&ev).unwrap();
+        let parsed: EncryptedValue = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(parsed.set_at, Some("2026-06-27T10:00:00Z".to_string()));
+    }
+
+    #[test]
+    fn encrypted_value_without_timestamp_compatible() {
+        let yaml = "ciphertext: test\nrecipient: age1xyz\n";
+        let parsed: EncryptedValue = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(parsed.set_at, None);
+    }
+
+    #[test]
+    fn timestamp_skip_none_serialization() {
+        let ev = EncryptedValue {
+            ciphertext: "test".to_string(),
+            recipient: "age1xyz".to_string(),
+            set_at: None,
+        };
+        let yaml = serde_yaml::to_string(&ev).unwrap();
+        assert!(!yaml.contains("set_at"));
     }
 
     #[test]
@@ -541,6 +578,7 @@ gbrain:
         let ev = EncryptedValue {
             ciphertext: "line1\nline2\nline3".to_string(),
             recipient: "age1abc".to_string(),
+            set_at: None,
         };
         let yaml = serde_yaml::to_string(&ev).unwrap();
         let parsed: EncryptedValue = serde_yaml::from_str(&yaml).unwrap();
@@ -554,7 +592,7 @@ gbrain:
             ciphertext in ".*",
             recipient in "age1[a-z0-9]{10,20}",
         ) {
-            let ev = EncryptedValue { ciphertext: ciphertext.clone(), recipient: recipient.clone() };
+            let ev = EncryptedValue { ciphertext: ciphertext.clone(), recipient: recipient.clone(), set_at: None };
             let yaml = serde_yaml::to_string(&ev).unwrap();
             let parsed: EncryptedValue = serde_yaml::from_str(&yaml).unwrap();
             prop_assert_eq!(parsed.ciphertext, ciphertext);

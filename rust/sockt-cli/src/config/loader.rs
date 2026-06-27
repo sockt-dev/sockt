@@ -143,14 +143,17 @@ mod tests {
                 app_token: EncryptedValue {
                     ciphertext: "ct1".to_string(),
                     recipient: "r1".to_string(),
+                    set_at: None,
                 },
                 bot_token: EncryptedValue {
                     ciphertext: "ct2".to_string(),
                     recipient: "r2".to_string(),
+                    set_at: None,
                 },
                 signing_secret: EncryptedValue {
                     ciphertext: "ct3".to_string(),
                     recipient: "r3".to_string(),
+                    set_at: None,
                 },
                 socket_mode: false,
             },
@@ -161,6 +164,7 @@ mod tests {
                 api_key: EncryptedValue {
                     ciphertext: "ct4".to_string(),
                     recipient: "r4".to_string(),
+                    set_at: None,
                 },
                 base_url: None,
                 aws_region: None,

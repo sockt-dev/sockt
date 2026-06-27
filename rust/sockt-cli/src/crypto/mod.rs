@@ -77,6 +77,52 @@ impl KeyManager {
             .map_err(|e| CryptoError::InvalidKey(format!("{e}")))?;
         Ok(identity)
     }
+
+    /// Generate a new identity without checking if one already exists
+    pub fn generate_new(&self) -> Result<age::x25519::Identity, CryptoError> {
+        Ok(age::x25519::Identity::generate())
+    }
+
+    /// Backup the current key file to key.txt.bak
+    pub fn backup(&self) -> Result<(), CryptoError> {
+        if !self.key_path.exists() {
+            return Err(CryptoError::KeyNotFound(self.key_path.clone()));
+        }
+        let backup_path = PathBuf::from(format!("{}.bak", self.key_path.display()));
+        std::fs::copy(&self.key_path, &backup_path)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&backup_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+
+        Ok(())
+    }
+
+    /// Save an identity to the key file
+    pub fn save(&self, identity: &age::x25519::Identity) -> Result<(), CryptoError> {
+        let key_str = identity.to_string();
+        std::fs::write(&self.key_path, key_str.expose_secret())?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.key_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+
+        Ok(())
+    }
+
+    /// Get a shortened fingerprint of an identity
+    pub fn fingerprint(identity: &age::x25519::Identity) -> String {
+        let recipient = identity.to_public().to_string();
+        if recipient.len() > 15 {
+            format!("{}...{}", &recipient[..8], &recipient[recipient.len()-4..])
+        } else {
+            recipient
+        }
+    }
 }
 
 pub fn encrypt(plaintext: &str, recipient: &age::x25519::Recipient) -> Result<EncryptedValue, CryptoError> {
@@ -98,6 +144,7 @@ pub fn encrypt(plaintext: &str, recipient: &age::x25519::Recipient) -> Result<En
     Ok(EncryptedValue {
         ciphertext: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &encrypted),
         recipient: recipient.to_string(),
+        set_at: None,
     })
 }
 
@@ -289,6 +336,7 @@ mod tests {
         let encrypted = EncryptedValue {
             ciphertext: "".to_string(),
             recipient: "age1abc".to_string(),
+            set_at: None,
         };
         let result = decrypt(&encrypted, &identity);
         assert!(result.is_err());
@@ -457,5 +505,62 @@ mod tests {
             );
             prop_assert!(decode_result.is_ok());
         }
+    }
+
+    #[test]
+    fn generate_new_creates_different_key() {
+        let dir = TempDir::new().unwrap();
+        let km = KeyManager::new(dir.path().join("key.txt"));
+        let id1 = km.generate().unwrap();
+        let id2 = km.generate_new().unwrap();
+        assert_ne!(id1.to_string().expose_secret(), id2.to_string().expose_secret());
+    }
+
+    #[test]
+    fn backup_creates_bak_file() {
+        let dir = TempDir::new().unwrap();
+        let km = KeyManager::new(dir.path().join("key.txt"));
+        km.generate().unwrap();
+        km.backup().unwrap();
+        assert!(dir.path().join("key.txt.bak").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn backup_preserves_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let km = KeyManager::new(dir.path().join("key.txt"));
+        km.generate().unwrap();
+        km.backup().unwrap();
+        let metadata = std::fs::metadata(dir.path().join("key.txt.bak")).unwrap();
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    fn save_overwrites_key_file() {
+        let dir = TempDir::new().unwrap();
+        let km = KeyManager::new(dir.path().join("key.txt"));
+        let _id1 = km.generate().unwrap();
+        let id2 = age::x25519::Identity::generate();
+        km.save(&id2).unwrap();
+        let loaded = km.load().unwrap();
+        assert_eq!(loaded.to_string().expose_secret(), id2.to_string().expose_secret());
+    }
+
+    #[test]
+    fn fingerprint_format() {
+        let id = age::x25519::Identity::generate();
+        let fp = KeyManager::fingerprint(&id);
+        assert!(fp.starts_with("age1"));
+        assert!(fp.contains("..."));
+    }
+
+    #[test]
+    fn fingerprint_stable() {
+        let id = age::x25519::Identity::generate();
+        let fp1 = KeyManager::fingerprint(&id);
+        let fp2 = KeyManager::fingerprint(&id);
+        assert_eq!(fp1, fp2);
     }
 }

@@ -85,6 +85,7 @@ mod tests {
         let encrypted = EncryptedValue {
             ciphertext: "base64data".to_string(),
             recipient: "age1xxx".to_string(),
+            set_at: None,
         };
         let value = ConfigValue::Encrypted(encrypted);
         assert_eq!(format_value(&value, true), "••••••••  (encrypted)");
