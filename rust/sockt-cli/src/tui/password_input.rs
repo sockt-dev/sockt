@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::cmp;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -85,7 +86,7 @@ impl PasswordInput {
 
             // Reprint prompt with masked input
             print!("{}", self.prompt);
-            for _ in 0..input.len() {
+            for _ in 0..input.len().min(20) {
                 print!("*");
             }
             println!();
@@ -111,7 +112,7 @@ impl PasswordInput {
         print!("{}", self.prompt);
 
         // Print masked characters
-        for _ in 0..input.len() {
+        for _ in 0..input.len().min(20) {
             print!("*");
         }
 
