@@ -138,9 +138,21 @@ pub struct StopArgs {
 
 #[derive(Args)]
 pub struct StatusArgs {
-    /// Show detailed container info
-    #[arg(long)]
+    /// Show detailed info (PIDs, ports, uptime)
+    #[arg(long, short)]
     pub detailed: bool,
+
+    /// Continuous refresh (TUI mode, 2s interval)
+    #[arg(long, short)]
+    pub watch: bool,
+
+    /// Machine-readable JSON output
+    #[arg(long)]
+    pub json: bool,
+
+    /// Just exit code: 0=healthy, 1=degraded, 2=down
+    #[arg(long, short)]
+    pub quiet: bool,
 }
 
 #[derive(Args)]
