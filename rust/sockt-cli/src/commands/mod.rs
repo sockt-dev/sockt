@@ -4,6 +4,7 @@ mod connect;
 mod down;
 mod export;
 mod init;
+mod setup;
 pub(crate) mod slack_setup;
 mod status;
 mod tasks;
@@ -15,6 +16,7 @@ use crate::cli::{Cli, Command};
 pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Command::Init(args) => init::run(args, cli.config).await,
+        Command::Setup(args) => setup::run(args, cli.config).await,
         Command::Up(args) => up::run(args, cli.config).await,
         Command::Down(args) => down::run(args, cli.config).await,
         Command::Status(args) => status::run(args, cli.config).await,

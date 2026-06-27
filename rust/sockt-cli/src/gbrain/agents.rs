@@ -1,5 +1,54 @@
 use super::OnboardingAnswers;
 
+pub fn generate_generic() -> String {
+    r#"# Agents — Your Company
+
+<!-- TODO: Customize agent roles and capabilities for your team. -->
+
+## Architect Agent
+
+**Role:** Strategic planning and task decomposition
+
+The architect agent receives inbound requests and breaks them into actionable tasks.
+
+### Capabilities
+- Task decomposition and planning
+- Priority assignment
+- Agent coordination
+- Escalation decisions
+
+---
+
+## Monitor Agent
+
+**Role:** Scheduled observation and reporting
+
+The monitor agent runs on cron schedules to observe system state and report changes.
+
+### Schedule
+- Every 15 minutes: health checks
+- Hourly: integration status
+- Daily: summary report
+
+---
+
+## Worker Agent
+
+**Role:** Task execution
+
+Worker agents execute specific tasks assigned by the architect.
+
+### Tools Available
+- (Configure with `sockt setup company`)
+
+---
+
+**Next steps:**
+- Run `sockt setup company` to customize this configuration, or
+- Edit this file directly
+"#.to_string()
+}
+
 pub fn generate(answers: &OnboardingAnswers) -> String {
     format!(
         r#"# Agents — {company_name}

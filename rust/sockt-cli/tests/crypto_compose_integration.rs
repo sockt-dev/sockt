@@ -10,27 +10,33 @@ fn sockt() -> Command {
 // ─── Edge Cases on CLI Argument Parsing ──────────────────────────────────────
 
 #[test]
-fn tier_is_case_insensitive_in_error_message() {
+fn provider_is_case_insensitive() {
     sockt()
-        .args(["init", "--tier", "LOCAL"])
+        .args([
+            "init",
+            "--provider", "ANTHROPIC",
+            "--frontier", "claude-sonnet-4-20250514",
+            "--fast", "claude-haiku-4-20250514",
+            "--non-interactive",
+            "--force"
+        ])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("local"));
+        .success();
 }
 
 #[test]
-fn empty_tier_value_rejected() {
+fn empty_provider_value_rejected() {
     sockt()
-        .args(["init", "--tier", ""])
+        .args(["init", "--provider", "", "--non-interactive", "--force"])
         .assert()
         .failure();
 }
 
 #[test]
-fn very_long_tier_value_rejected() {
+fn very_long_provider_value_rejected() {
     let long_val = "x".repeat(10000);
     sockt()
-        .args(["init", "--tier", &long_val])
+        .args(["init", "--provider", &long_val, "--non-interactive", "--force"])
         .assert()
         .failure();
 }
@@ -45,7 +51,10 @@ fn dir_flag_accepts_path_with_spaces() {
         .args([
             "init",
             "--non-interactive",
-            "--tier", "local",
+            "--provider", "anthropic",
+            "--frontier", "claude-sonnet-4-20250514",
+            "--fast", "claude-haiku-4-20250514",
+            "--force",
             "--dir", path_with_spaces.to_str().unwrap(),
         ])
         .assert()
@@ -62,7 +71,10 @@ fn dir_flag_accepts_unicode_path() {
         .args([
             "init",
             "--non-interactive",
-            "--tier", "local",
+            "--provider", "anthropic",
+            "--frontier", "claude-sonnet-4-20250514",
+            "--fast", "claude-haiku-4-20250514",
+            "--force",
             "--dir", unicode_path.to_str().unwrap(),
         ])
         .assert()

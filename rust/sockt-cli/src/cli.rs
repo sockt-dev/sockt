@@ -20,6 +20,8 @@ pub struct Cli {
 pub enum Command {
     /// Initialize a new Sockt deployment (interactive wizard)
     Init(InitArgs),
+    /// Configure Slack, company info, and other settings
+    Setup(SetupArgs),
     /// Start all containers
     Up(UpArgs),
     /// Stop all containers
@@ -48,9 +50,30 @@ pub struct InitArgs {
     /// Target directory (default: current dir)
     #[arg(short, long)]
     pub dir: Option<PathBuf>,
-    /// Tier: local, cloud, enterprise
-    #[arg(short, long)]
-    pub tier: Option<Tier>,
+    /// Overwrite existing config without prompting
+    #[arg(long)]
+    pub force: bool,
+    /// LLM provider: anthropic|openai|bedrock|custom
+    #[arg(long)]
+    pub provider: Option<String>,
+    /// API key (or env: SOCKT_API_KEY)
+    #[arg(long)]
+    pub api_key: Option<String>,
+    /// Single model ID (auto-splits to frontier+fast)
+    #[arg(long)]
+    pub model: Option<String>,
+    /// Frontier model override
+    #[arg(long)]
+    pub frontier: Option<String>,
+    /// Fast model override
+    #[arg(long)]
+    pub fast: Option<String>,
+    /// Custom endpoint URL (for custom provider)
+    #[arg(long)]
+    pub base_url: Option<String>,
+    /// Don't test LLM connectivity
+    #[arg(long)]
+    pub skip_verify: bool,
 }
 
 #[derive(Args)]
@@ -146,4 +169,59 @@ pub enum Tier {
     Local,
     Cloud,
     Enterprise,
+}
+
+#[derive(Args)]
+pub struct SetupArgs {
+    #[command(subcommand)]
+    pub command: SetupCommand,
+}
+
+#[derive(Subcommand)]
+pub enum SetupCommand {
+    /// Configure Slack integration
+    Slack(SetupSlackArgs),
+    /// Configure company context
+    Company(SetupCompanyArgs),
+}
+
+#[derive(Args)]
+pub struct SetupSlackArgs {
+    /// Skip interactive prompts (use flags/env vars)
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// Slack App Token (xapp-...)
+    #[arg(long)]
+    pub app_token: Option<String>,
+    /// Slack Bot Token (xoxb-...)
+    #[arg(long)]
+    pub bot_token: Option<String>,
+    /// Slack Signing Secret
+    #[arg(long)]
+    pub signing_secret: Option<String>,
+}
+
+#[derive(Args)]
+pub struct SetupCompanyArgs {
+    /// Skip interactive prompts (use flags)
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// Company name
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Industry
+    #[arg(long)]
+    pub industry: Option<String>,
+    /// Team size (e.g., "1-10", "11-50")
+    #[arg(long)]
+    pub team_size: Option<String>,
+    /// Primary use case
+    #[arg(long)]
+    pub use_case: Option<String>,
+    /// Communication tone (professional|casual|friendly|technical)
+    #[arg(long)]
+    pub tone: Option<String>,
+    /// Approval threshold (conservative|balanced|permissive)
+    #[arg(long)]
+    pub approval: Option<String>,
 }

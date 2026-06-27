@@ -39,12 +39,13 @@ fn version_exits_zero_and_shows_version() {
 // ─── Subcommand Help ─────────────────────────────────────────────────────────
 
 #[test]
-fn init_help_shows_tier_option() {
+fn init_help_shows_provider_option() {
     sockt()
         .args(["init", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("--tier"))
+        .stdout(predicate::str::contains("--provider"))
+        .stdout(predicate::str::contains("--api-key"))
         .stdout(predicate::str::contains("--non-interactive"))
         .stdout(predicate::str::contains("--dir"));
 }
@@ -115,12 +116,12 @@ fn export_help_shows_output_option() {
 // ─── Invalid Input ───────────────────────────────────────────────────────────
 
 #[test]
-fn invalid_tier_value_exits_nonzero() {
+fn invalid_provider_value_exits_nonzero() {
     sockt()
-        .args(["init", "--tier", "invalid"])
+        .args(["init", "--provider", "invalid", "--non-interactive", "--force"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("invalid value"));
+        .stderr(predicate::str::contains("Invalid provider"));
 }
 
 #[test]
@@ -166,28 +167,55 @@ fn global_config_flag_accepted() {
         .success();
 }
 
-// ─── Tier Validation ─────────────────────────────────────────────────────────
+// ─── Provider Validation ─────────────────────────────────────────────────────
 
 #[test]
-fn tier_local_accepted() {
+fn provider_anthropic_accepted() {
+    let temp_dir = TempDir::new().unwrap();
     sockt()
-        .args(["init", "--tier", "local", "--non-interactive", "--dir", "/tmp/sockt-test-local"])
+        .args([
+            "init",
+            "--provider", "anthropic",
+            "--frontier", "claude-sonnet-4-20250514",
+            "--fast", "claude-haiku-4-20250514",
+            "--non-interactive",
+            "--force",
+            "--dir", temp_dir.path().to_str().unwrap()
+        ])
         .assert()
         .success();
 }
 
 #[test]
-fn tier_cloud_accepted() {
+fn provider_openai_accepted() {
+    let temp_dir = TempDir::new().unwrap();
     sockt()
-        .args(["init", "--tier", "cloud", "--non-interactive", "--dir", "/tmp/sockt-test-cloud"])
+        .args([
+            "init",
+            "--provider", "openai",
+            "--frontier", "gpt-4o",
+            "--fast", "gpt-4o-mini",
+            "--non-interactive",
+            "--force",
+            "--dir", temp_dir.path().to_str().unwrap()
+        ])
         .assert()
         .success();
 }
 
 #[test]
-fn tier_enterprise_accepted() {
+fn provider_custom_accepted() {
+    let temp_dir = TempDir::new().unwrap();
     sockt()
-        .args(["init", "--tier", "enterprise", "--non-interactive", "--dir", "/tmp/sockt-test-ent"])
+        .args([
+            "init",
+            "--provider", "custom",
+            "--frontier", "llama3",
+            "--fast", "llama3",
+            "--non-interactive",
+            "--force",
+            "--dir", temp_dir.path().to_str().unwrap()
+        ])
         .assert()
         .success();
 }

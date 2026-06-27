@@ -33,6 +33,23 @@ impl Default for OnboardingAnswers {
 pub struct GBrainScaffolder;
 
 impl GBrainScaffolder {
+    pub fn scaffold_generic(dir: &Path) -> anyhow::Result<()> {
+        std::fs::create_dir_all(dir)?;
+        std::fs::create_dir_all(dir.join("skills"))?;
+        std::fs::create_dir_all(dir.join("memory"))?;
+
+        let soul_content = soul::generate_generic();
+        std::fs::write(dir.join("SOUL.md"), soul_content)?;
+
+        let agents_content = agents::generate_generic();
+        std::fs::write(dir.join("AGENTS.md"), agents_content)?;
+
+        let example_skill = include_str!("example_skill.md");
+        std::fs::write(dir.join("skills").join("example.md"), example_skill)?;
+
+        Ok(())
+    }
+
     pub fn scaffold(dir: &Path, answers: &OnboardingAnswers) -> anyhow::Result<()> {
         std::fs::create_dir_all(dir)?;
         std::fs::create_dir_all(dir.join("skills"))?;
