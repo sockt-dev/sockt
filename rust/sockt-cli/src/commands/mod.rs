@@ -1,6 +1,7 @@
 mod brain;
 mod config_cmd;
 mod connect;
+mod deploy;
 mod down;
 mod export;
 mod init;
@@ -18,7 +19,11 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Command::Init(args) => init::run(args, cli.config).await,
         Command::Setup(args) => setup::run(args, cli.config).await,
-        Command::Up(args) => up::run(args, cli.config).await,
+        Command::Deploy(args) => deploy::run(args, cli.config).await,
+        Command::Up(args) => {
+            eprintln!("Note: `sockt up` is now `sockt deploy`");
+            deploy::run(args, cli.config).await
+        }
         Command::Down(args) => down::run(args, cli.config).await,
         Command::Status(args) => status::run(args, cli.config).await,
         Command::Tasks(args) => tasks::run(args, cli.config).await,

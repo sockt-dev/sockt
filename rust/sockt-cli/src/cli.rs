@@ -22,8 +22,11 @@ pub enum Command {
     Init(InitArgs),
     /// Configure Slack, company info, and other settings
     Setup(SetupArgs),
-    /// Start all containers
-    Up(UpArgs),
+    /// Deploy the agent swarm (start all services)
+    Deploy(DeployArgs),
+    /// Start all containers (DEPRECATED: use `sockt deploy`)
+    #[command(hide = true)]
+    Up(DeployArgs),
     /// Stop all containers
     Down(DownArgs),
     /// Show deployment status
@@ -76,6 +79,29 @@ pub struct InitArgs {
     /// Don't test LLM connectivity
     #[arg(long)]
     pub skip_verify: bool,
+}
+
+#[derive(Args)]
+pub struct DeployArgs {
+    /// Run in background (default behavior)
+    #[arg(short, long, conflicts_with = "watch")]
+    pub detach: bool,
+
+    /// Stay attached and stream logs
+    #[arg(short, long, conflicts_with = "detach")]
+    pub watch: bool,
+
+    /// Only deploy services for a specific department
+    #[arg(long)]
+    pub department: Option<String>,
+
+    /// Max seconds to wait for services to become healthy
+    #[arg(long, default_value = "60")]
+    pub timeout: u64,
+
+    /// Show what would be deployed without starting services
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Args)]
