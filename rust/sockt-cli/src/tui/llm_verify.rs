@@ -152,18 +152,24 @@ async fn verify_bedrock(
     model: &str,
 ) -> Result<String, String> {
     let endpoint = format!(
-        "https://bedrock-runtime.{}.amazonaws.com/model/{}/invoke",
+        "https://bedrock-runtime.{}.amazonaws.com/model/{}/converse",
         region, model
     );
 
     let resp = client
         .post(&endpoint)
         .header("content-type", "application/json")
-        .header("x-api-key", api_key)
+        .bearer_auth(api_key)
         .json(&serde_json::json!({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 10,
-            "messages": [{"role": "user", "content": "Respond with only the word OK."}]
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"text": "Respond with only the word OK."}]
+                }
+            ],
+            "inferenceConfig": {
+                "maxTokens": 10
+            }
         }))
         .send()
         .await
@@ -172,7 +178,7 @@ async fn verify_bedrock(
     parse_status(resp.status(), model)?;
 
     let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let text = body["content"][0]["text"]
+    let text = body["output"]["message"]["content"][0]["text"]
         .as_str()
         .unwrap_or("OK")
         .to_string();
