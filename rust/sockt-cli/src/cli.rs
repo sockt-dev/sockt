@@ -27,8 +27,11 @@ pub enum Command {
     /// Start all containers (DEPRECATED: use `sockt deploy`)
     #[command(hide = true)]
     Up(DeployArgs),
-    /// Stop all containers
+    /// Stop all containers (DEPRECATED: use `sockt stop`)
+    #[command(hide = true)]
     Down(DownArgs),
+    /// Stop the swarm (graceful shutdown)
+    Stop(StopArgs),
     /// Show deployment status
     Status(StatusArgs),
     /// List and manage tasks
@@ -116,6 +119,21 @@ pub struct DownArgs {
     /// Remove volumes
     #[arg(long)]
     pub volumes: bool,
+}
+
+#[derive(Args)]
+pub struct StopArgs {
+    /// Kill immediately (SIGKILL, don't wait for graceful shutdown)
+    #[arg(long)]
+    pub force: bool,
+
+    /// Remove runtime state and scratch data after stopping
+    #[arg(long)]
+    pub purge: bool,
+
+    /// Max seconds to wait for graceful shutdown
+    #[arg(long, default_value = "30")]
+    pub timeout: u64,
 }
 
 #[derive(Args)]

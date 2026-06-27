@@ -9,6 +9,7 @@ mod secrets;
 mod setup;
 pub(crate) mod slack_setup;
 mod status;
+mod stop;
 mod tasks;
 mod up;
 mod upgrade_cmd;
@@ -25,6 +26,7 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
             deploy::run(args, cli.config).await
         }
         Command::Down(args) => down::run(args, cli.config).await,
+        Command::Stop(args) => stop::run(args, cli.config).await,
         Command::Status(args) => status::run(args, cli.config).await,
         Command::Tasks(args) => tasks::run(args, cli.config).await,
         Command::Brain(args) => brain::run(args, cli.config).await,
