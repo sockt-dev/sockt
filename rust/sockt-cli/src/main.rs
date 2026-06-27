@@ -5,6 +5,7 @@ mod config;
 mod crypto;
 mod docker;
 mod gbrain;
+mod logs;
 mod orch_client;
 mod runtime;
 mod socket_mode;

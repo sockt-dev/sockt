@@ -5,6 +5,7 @@ mod deploy;
 mod down;
 mod export;
 mod init;
+mod logs;
 mod secrets;
 mod setup;
 pub(crate) mod slack_setup;
@@ -35,5 +36,6 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Upgrade(args) => upgrade_cmd::run(args).await,
         Command::Export(args) => export::run(args, cli.config).await,
         Command::Secrets(args) => secrets::run(args, cli.config).await,
+        Command::Logs(args) => logs::run(args, cli.config).await,
     }
 }

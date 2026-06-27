@@ -48,6 +48,8 @@ pub enum Command {
     Export(ExportArgs),
     /// Manage encrypted secrets
     Secrets(SecretsArgs),
+    /// View agent logs
+    Logs(LogsArgs),
 }
 
 #[derive(Args)]
@@ -399,4 +401,38 @@ pub enum SecretsCommand {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+}
+
+#[derive(Args)]
+pub struct LogsArgs {
+    /// Agent name to filter (optional, shows all if omitted)
+    pub agent: Option<String>,
+
+    /// Stream continuously (tail -f style)
+    #[arg(short, long)]
+    pub follow: bool,
+
+    /// Last N entries to show (default: 50)
+    #[arg(long, default_value = "50")]
+    pub tail: usize,
+
+    /// Filter by time (e.g., "1h", "30m", "2d")
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// Filter by level: debug|info|warn|error
+    #[arg(long)]
+    pub level: Option<String>,
+
+    /// Output raw JSON events (for piping to jq)
+    #[arg(long)]
+    pub json: bool,
+
+    /// Disable color output
+    #[arg(long)]
+    pub no_color: bool,
+
+    /// Show raw logs (fallback/debug mode)
+    #[arg(long)]
+    pub raw: bool,
 }
