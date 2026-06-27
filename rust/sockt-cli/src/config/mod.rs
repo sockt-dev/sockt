@@ -55,6 +55,8 @@ pub struct SocktConfig {
     pub models: ModelConfig,
     #[serde(default)]
     pub gbrain: GBrainConfig,
+    #[serde(default)]
+    pub integrations: IntegrationsConfig,
 }
 
 fn default_version() -> String {
@@ -74,6 +76,7 @@ impl Default for SocktConfig {
             slack: SlackConfig::default(),
             models: ModelConfig::default(),
             gbrain: GBrainConfig::default(),
+            integrations: IntegrationsConfig::default(),
         }
     }
 }
@@ -176,6 +179,64 @@ pub struct EncryptedValue {
     pub ciphertext: String,
     #[serde(default)]
     pub recipient: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IntegrationsConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github: Option<GitHubConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hubspot: Option<HubSpotConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linear: Option<LinearConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentry: Option<SentryConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pagerduty: Option<PagerDutyConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apollo: Option<ApolloConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubConfig {
+    pub token: EncryptedValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub organization: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repositories: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HubSpotConfig {
+    pub api_key: EncryptedValue,
+    pub portal_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinearConfig {
+    pub api_key: EncryptedValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SentryConfig {
+    pub auth_token: EncryptedValue,
+    pub dsn: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub organization_slug: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PagerDutyConfig {
+    pub api_token: EncryptedValue,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub service_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApolloConfig {
+    pub api_key: EncryptedValue,
 }
 
 #[cfg(test)]

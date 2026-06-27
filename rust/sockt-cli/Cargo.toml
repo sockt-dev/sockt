@@ -57,6 +57,7 @@ dirs = "6"
 thiserror = "2"
 anyhow = "1"
 secrecy = "0.10"
+url = "2"
 
 [dev-dependencies]
 assert_cmd = "2"

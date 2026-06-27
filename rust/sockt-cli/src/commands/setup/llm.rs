@@ -23,6 +23,29 @@ pub async fn run(args: SetupLlmArgs, config_path: Option<PathBuf>) -> anyhow::Re
         .load()
         .context("Failed to load existing config")?;
 
+    // In interactive mode, show current config
+    if !args.non_interactive {
+        println!();
+        println!("  Current LLM configuration:");
+        println!("    Provider:  {}", config.models.provider);
+        println!("    Frontier:  {}", config.models.frontier);
+        println!("    Fast:      {}", config.models.fast);
+        println!();
+
+        let reconfigure = dialoguer::Confirm::new()
+            .with_prompt("  Reconfigure?")
+            .default(true)
+            .interact()
+            .map_err(|_| anyhow::anyhow!("Setup cancelled."))?;
+
+        if !reconfigure {
+            println!();
+            println!("  LLM configuration unchanged.");
+            println!();
+            return Ok(());
+        }
+    }
+
     let model_info = if args.non_interactive {
         collect_non_interactive(&args)?
     } else {
