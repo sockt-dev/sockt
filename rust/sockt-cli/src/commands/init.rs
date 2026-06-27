@@ -11,6 +11,7 @@ use crate::config::{
 use crate::crypto::{self, KeyManager};
 use crate::gbrain::{GBrainScaffolder, OnboardingAnswers};
 use crate::tui::llm_verify;
+use crate::tui::password_input::PasswordInput;
 use crate::tui::wizard::WizardState;
 
 struct SlackTokens {
@@ -201,24 +202,30 @@ async fn collect_interactive(
         match state.model_provider.as_ref().unwrap() {
             ModelProvider::Anthropic => {
                 llm_verify::print_hint("Get your API key at https://platform.claude.com/settings/keys");
-                state.model_api_key = dialoguer::Password::new()
-                    .with_prompt("  API key")
+                state.model_api_key = PasswordInput::new("  API key: ")
                     .interact()
                     .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+                if !state.model_api_key.is_empty() && !state.model_api_key.starts_with("sk-ant-") {
+                    llm_verify::print_hint("Note: Anthropic API keys typically start with sk-ant-");
+                }
             }
             ModelProvider::Openai => {
                 llm_verify::print_hint("Get your API key at https://platform.openai.com/api-keys");
-                state.model_api_key = dialoguer::Password::new()
-                    .with_prompt("  API key")
+                state.model_api_key = PasswordInput::new("  API key: ")
                     .interact()
                     .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+                if !state.model_api_key.is_empty() && !state.model_api_key.starts_with("sk-") {
+                    llm_verify::print_hint("Note: OpenAI API keys typically start with sk-");
+                }
             }
             ModelProvider::Bedrock => {
                 llm_verify::print_hint("Enter your API key and region for Bedrock access.");
-                state.model_api_key = dialoguer::Password::new()
-                    .with_prompt("  API key")
+                state.model_api_key = PasswordInput::new("  API key: ")
                     .interact()
                     .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
                 state.aws_region = dialoguer::Input::new()
                     .with_prompt("  AWS Region")
                     .default("us-east-1".to_string())
@@ -232,13 +239,14 @@ async fn collect_interactive(
                     .default("http://localhost:11434/v1".to_string())
                     .interact()
                     .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
-                state.model_api_key = dialoguer::Password::new()
-                    .with_prompt("  API key")
-                    .allow_empty_password(true)
+                state.model_api_key = PasswordInput::new("  API key: ")
+                    .allow_empty(true)
                     .interact()
                     .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
                 if state.model_api_key.is_empty() {
                     state.model_api_key = "none".to_string();
+                    llm_verify::print_hint("Using no API key (endpoint requires no authentication)");
                 }
             }
         }
@@ -386,23 +394,28 @@ async fn collect_interactive(
     }
 
     loop {
-        state.slack_app_token = dialoguer::Password::new()
-            .with_prompt("  Slack App Token (xapp-...)")
-            .allow_empty_password(true)
+        state.slack_app_token = PasswordInput::new("  Slack App Token (xapp-...): ")
+            .allow_empty(true)
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
 
-        state.slack_signing_secret = dialoguer::Password::new()
-            .with_prompt("  Slack Signing Secret")
-            .allow_empty_password(true)
+        if !state.slack_app_token.is_empty() && !state.slack_app_token.starts_with("xapp-") {
+            llm_verify::print_hint("Note: Slack App Tokens typically start with xapp-");
+        }
+
+        state.slack_signing_secret = PasswordInput::new("  Slack Signing Secret: ")
+            .allow_empty(true)
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
 
-        state.slack_bot_token = dialoguer::Password::new()
-            .with_prompt("  Slack Bot Token (xoxb-...)")
-            .allow_empty_password(true)
+        state.slack_bot_token = PasswordInput::new("  Slack Bot Token (xoxb-...): ")
+            .allow_empty(true)
             .interact()
             .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+        if !state.slack_bot_token.is_empty() && !state.slack_bot_token.starts_with("xoxb-") {
+            llm_verify::print_hint("Note: Slack Bot Tokens typically start with xoxb-");
+        }
 
         match state.advance() {
             Ok(()) => break,
