@@ -11,6 +11,7 @@ services:
     environment:
       TENANT_ID: test-deploy
       GBRAIN_MCP_URL: http://gbrain:3200
+      MODEL_PROVIDER: anthropic
       FRONTIER_MODEL: claude-sonnet-4-20250514
       FAST_MODEL: claude-haiku-4-20250514
     depends_on:

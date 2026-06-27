@@ -27,6 +27,10 @@ pub fn orch_service(config: &SocktConfig) -> Value {
         Value::String("http://gbrain:3200".into()),
     );
     env.insert(
+        Value::String("MODEL_PROVIDER".into()),
+        Value::String(config.models.provider.to_string()),
+    );
+    env.insert(
         Value::String("FRONTIER_MODEL".into()),
         Value::String(config.models.frontier.clone()),
     );
@@ -34,6 +38,18 @@ pub fn orch_service(config: &SocktConfig) -> Value {
         Value::String("FAST_MODEL".into()),
         Value::String(config.models.fast.clone()),
     );
+    if let Some(ref base_url) = config.models.base_url {
+        env.insert(
+            Value::String("MODEL_BASE_URL".into()),
+            Value::String(base_url.clone()),
+        );
+    }
+    if let Some(ref region) = config.models.aws_region {
+        env.insert(
+            Value::String("AWS_REGION".into()),
+            Value::String(region.clone()),
+        );
+    }
     service.insert(
         Value::String("environment".into()),
         Value::Mapping(env),

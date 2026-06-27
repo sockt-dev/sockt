@@ -23,17 +23,62 @@ export class HttpLlmClient implements LlmClient {
 
     const provider = getProvider(config);
 
-    const result = await withRetry(() =>
-      generateText({
-        model: provider(config.model),
-        messages: this.convertMessages(request.messages),
-        tools: request.tools ? this.convertTools(request.tools) : undefined,
-        maxTokens: config.maxTokens,
-        temperature: config.temperature,
-      }),
-    );
+    const options: any = {
+      model: provider(config.model),
+      messages: this.convertMessages(request.messages),
+      tools: request.tools ? this.convertTools(request.tools) : undefined,
+      maxTokens: config.maxTokens,
+      temperature: config.temperature,
+    };
 
-    return this.convertResponse(result, config.model);
+    if (config.features) {
+      if (config.features.thinking?.enabled) {
+        options.experimental_thinking = {
+          type: "enabled",
+          budgetTokens: config.features.thinking.budgetTokens,
+          display: config.features.thinking.display,
+        };
+      }
+
+      if (config.features.structuredOutput?.enabled && config.features.structuredOutput.schema) {
+        options.output = jsonSchema(config.features.structuredOutput.schema as any);
+      }
+
+      if (config.features.promptCaching?.enabled) {
+        options.experimental_providerMetadata = {
+          anthropic: {
+            cacheControl: { type: "ephemeral" },
+          },
+        };
+      }
+    }
+
+    try {
+      const result = await withRetry(() => generateText(options));
+      return this.convertResponse(result, config.model);
+    } catch (error) {
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes("decoding") || errorMsg.includes("invalid json") || errorMsg.includes("unexpected token")) {
+          throw new LlmError(
+            `Failed to parse response from ${config.provider} provider at ${config.baseUrl || "default URL"}. ` +
+            `This may indicate an API incompatibility or incorrect endpoint configuration. ` +
+            `For OpenRouter, use provider: "openrouter" or ensure baseUrl points to a valid OpenAI-compatible endpoint. ` +
+            `Original error: ${error.message}`,
+            {
+              provider: config.provider,
+              baseUrl: config.baseUrl,
+              model: config.model,
+              originalError: error.message,
+              suggestion: config.provider === "openai" && config.baseUrl?.includes("openrouter")
+                ? 'Try setting provider: "openrouter" instead of "openai"'
+                : undefined
+            }
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   async *stream(request: LlmRequest): AsyncIterable<LlmStreamChunk> {
@@ -63,8 +108,9 @@ export class HttpLlmClient implements LlmClient {
     return messages.map((m): CoreMessage => {
       if (m.role === "assistant" && m.toolCalls?.length) {
         const parts: (TextPart | ToolCallPart)[] = [];
-        if (m.content) {
-          parts.push({ type: "text", text: m.content });
+        const contentStr = typeof m.content === "string" ? m.content : "";
+        if (contentStr) {
+          parts.push({ type: "text", text: contentStr });
         }
         for (const tc of m.toolCalls) {
           parts.push({
@@ -78,15 +124,52 @@ export class HttpLlmClient implements LlmClient {
       }
 
       if (m.role === "tool") {
+        const contentStr = typeof m.content === "string" ? m.content : "";
         const parts: ToolResultPart[] = [
           {
             type: "tool-result",
             toolCallId: m.toolCallId!,
             toolName: "",
-            result: m.content,
+            result: contentStr,
           },
         ];
         return { role: "tool", content: parts };
+      }
+
+      if (Array.isArray(m.content)) {
+        const parts = m.content.map(content => {
+          switch (content.type) {
+            case "text":
+              return { type: "text" as const, text: content.text ?? "" };
+            case "image":
+              return {
+                type: "image" as const,
+                image: content.imageUrl || content.imageBase64 || "",
+                mimeType: content.mimeType,
+              };
+            case "audio":
+              return {
+                type: "file" as const,
+                data: content.audioUrl || content.audioBase64 || "",
+                mimeType: content.mimeType || "audio/wav",
+              };
+            case "document":
+              return {
+                type: "file" as const,
+                data: content.documentUrl || content.documentBase64 || "",
+                mimeType: content.mimeType || "application/pdf",
+              };
+            case "video":
+              return {
+                type: "file" as const,
+                data: content.imageUrl || content.imageBase64 || "",
+                mimeType: content.mimeType || "video/mp4",
+              };
+            default:
+              throw new LlmError(`Unsupported content type: ${(content as any).type}`, {});
+          }
+        });
+        return { role: "user" as const, content: parts as any };
       }
 
       return { role: m.role as "system" | "user" | "assistant", content: m.content };
@@ -123,6 +206,9 @@ export class HttpLlmClient implements LlmClient {
         promptTokens: result.usage?.promptTokens ?? 0,
         completionTokens: result.usage?.completionTokens ?? 0,
         totalTokens: (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0),
+        cacheReadInputTokens: result.usage?.cacheReadInputTokens,
+        cacheWriteInputTokens: result.usage?.cacheWriteInputTokens,
+        reasoningTokens: result.experimental_thinking?.thinkingTokens,
       },
       model,
       finishReason,

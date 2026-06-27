@@ -19,5 +19,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^5.0.0"
   }
 }

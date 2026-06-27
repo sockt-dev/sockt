@@ -1,11 +1,12 @@
 use crate::cli::Tier;
+use crate::config::ModelProvider;
 use crate::gbrain::OnboardingAnswers;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WizardStep {
     TierSelection,
+    LlmSetup,
     SlackCredentials,
-    ModelProvider,
     CompanyInfo,
     Review,
 }
@@ -14,12 +15,19 @@ pub enum WizardStep {
 pub struct WizardState {
     pub step: WizardStep,
     pub tier: Option<Tier>,
+    // LLM
+    pub model_provider: Option<ModelProvider>,
+    pub model_api_key: String,
+    pub model_base_url: String,
+    pub model_frontier: String,
+    pub model_fast: String,
+    pub model_verified: bool,
+    pub aws_region: String,
+    // Slack
     pub slack_app_token: String,
     pub slack_bot_token: String,
     pub slack_signing_secret: String,
-    pub model_api_key: String,
-    pub model_frontier: String,
-    pub model_fast: String,
+    // Company
     pub company_name: String,
     pub industry: String,
     pub team_size: String,
@@ -34,12 +42,16 @@ impl Default for WizardState {
         Self {
             step: WizardStep::TierSelection,
             tier: None,
+            model_provider: None,
+            model_api_key: String::new(),
+            model_base_url: String::new(),
+            model_frontier: String::new(),
+            model_fast: String::new(),
+            model_verified: false,
+            aws_region: String::new(),
             slack_app_token: String::new(),
             slack_bot_token: String::new(),
             slack_signing_secret: String::new(),
-            model_api_key: String::new(),
-            model_frontier: "claude-sonnet-4-20250514".to_string(),
-            model_fast: "claude-haiku-4-20250514".to_string(),
             company_name: String::new(),
             industry: String::new(),
             team_size: String::new(),
@@ -58,6 +70,57 @@ impl WizardState {
                 if self.tier.is_none() {
                     return Err(WizardValidationError::Required("tier".to_string()));
                 }
+                self.step = WizardStep::LlmSetup;
+            }
+            WizardStep::LlmSetup => {
+                let provider = self
+                    .model_provider
+                    .as_ref()
+                    .ok_or_else(|| WizardValidationError::Required("provider".to_string()))?;
+
+                match provider {
+                    ModelProvider::Anthropic | ModelProvider::Openai => {
+                        if self.model_api_key.is_empty() {
+                            return Err(WizardValidationError::Required(
+                                "api_key".to_string(),
+                            ));
+                        }
+                    }
+                    ModelProvider::Bedrock => {
+                        if self.model_api_key.is_empty() {
+                            return Err(WizardValidationError::Required(
+                                "api_key".to_string(),
+                            ));
+                        }
+                        if self.aws_region.is_empty() {
+                            return Err(WizardValidationError::Required(
+                                "aws_region".to_string(),
+                            ));
+                        }
+                    }
+                    ModelProvider::Custom => {
+                        if self.model_base_url.is_empty() {
+                            return Err(WizardValidationError::Required(
+                                "base_url".to_string(),
+                            ));
+                        }
+                        if self.model_api_key.is_empty() {
+                            return Err(WizardValidationError::Required(
+                                "api_key".to_string(),
+                            ));
+                        }
+                    }
+                }
+
+                if self.model_frontier.is_empty() {
+                    return Err(WizardValidationError::Required(
+                        "frontier_model".to_string(),
+                    ));
+                }
+                if self.model_fast.is_empty() {
+                    return Err(WizardValidationError::Required("fast_model".to_string()));
+                }
+
                 self.step = WizardStep::SlackCredentials;
             }
             WizardStep::SlackCredentials => {
@@ -75,12 +138,6 @@ impl WizardState {
                     return Err(WizardValidationError::Required(
                         "signing_secret".to_string(),
                     ));
-                }
-                self.step = WizardStep::ModelProvider;
-            }
-            WizardStep::ModelProvider => {
-                if self.model_api_key.is_empty() {
-                    return Err(WizardValidationError::Required("api_key".to_string()));
                 }
                 self.step = WizardStep::CompanyInfo;
             }
@@ -100,9 +157,9 @@ impl WizardState {
     pub fn back(&mut self) {
         self.step = match self.step {
             WizardStep::TierSelection => WizardStep::TierSelection,
-            WizardStep::SlackCredentials => WizardStep::TierSelection,
-            WizardStep::ModelProvider => WizardStep::SlackCredentials,
-            WizardStep::CompanyInfo => WizardStep::ModelProvider,
+            WizardStep::LlmSetup => WizardStep::TierSelection,
+            WizardStep::SlackCredentials => WizardStep::LlmSetup,
+            WizardStep::CompanyInfo => WizardStep::SlackCredentials,
             WizardStep::Review => WizardStep::CompanyInfo,
         };
     }
@@ -141,12 +198,16 @@ mod tests {
         WizardState {
             step: WizardStep::TierSelection,
             tier: Some(Tier::Local),
+            model_provider: Some(ModelProvider::Anthropic),
+            model_api_key: "sk-ant-key123".to_string(),
+            model_base_url: String::new(),
+            model_frontier: "claude-sonnet-4-20250514".to_string(),
+            model_fast: "claude-haiku-4-20250514".to_string(),
+            model_verified: false,
+            aws_region: String::new(),
             slack_app_token: "xapp-1-ABC123".to_string(),
             slack_bot_token: "xoxb-123-456-abc".to_string(),
             slack_signing_secret: "abc123secret".to_string(),
-            model_api_key: "sk-ant-key123".to_string(),
-            model_frontier: "claude-sonnet-4-20250514".to_string(),
-            model_fast: "claude-haiku-4-20250514".to_string(),
             company_name: "TestCo".to_string(),
             industry: "Tech".to_string(),
             team_size: "1-10".to_string(),
@@ -165,9 +226,9 @@ mod tests {
 
         assert_eq!(state.step, WizardStep::TierSelection);
         state.advance().unwrap();
-        assert_eq!(state.step, WizardStep::SlackCredentials);
+        assert_eq!(state.step, WizardStep::LlmSetup);
         state.advance().unwrap();
-        assert_eq!(state.step, WizardStep::ModelProvider);
+        assert_eq!(state.step, WizardStep::SlackCredentials);
         state.advance().unwrap();
         assert_eq!(state.step, WizardStep::CompanyInfo);
         state.advance().unwrap();
@@ -186,9 +247,9 @@ mod tests {
     fn back_from_every_step() {
         let steps = [
             (WizardStep::TierSelection, WizardStep::TierSelection),
-            (WizardStep::SlackCredentials, WizardStep::TierSelection),
-            (WizardStep::ModelProvider, WizardStep::SlackCredentials),
-            (WizardStep::CompanyInfo, WizardStep::ModelProvider),
+            (WizardStep::LlmSetup, WizardStep::TierSelection),
+            (WizardStep::SlackCredentials, WizardStep::LlmSetup),
+            (WizardStep::CompanyInfo, WizardStep::SlackCredentials),
             (WizardStep::Review, WizardStep::CompanyInfo),
         ];
 
@@ -203,14 +264,14 @@ mod tests {
     #[test]
     fn back_then_advance_roundtrip() {
         let mut state = filled_state();
-        state.step = WizardStep::SlackCredentials;
+        state.step = WizardStep::LlmSetup;
 
-        state.advance().unwrap(); // → ModelProvider
-        state.back(); // → SlackCredentials
+        state.advance().unwrap(); // → SlackCredentials
+        state.back(); // → LlmSetup
+        assert_eq!(state.step, WizardStep::LlmSetup);
+
+        state.advance().unwrap(); // → SlackCredentials again
         assert_eq!(state.step, WizardStep::SlackCredentials);
-
-        state.advance().unwrap(); // → ModelProvider again
-        assert_eq!(state.step, WizardStep::ModelProvider);
     }
 
     #[test]
@@ -221,9 +282,9 @@ mod tests {
         state.back();
         assert_eq!(state.step, WizardStep::CompanyInfo);
         state.back();
-        assert_eq!(state.step, WizardStep::ModelProvider);
-        state.back();
         assert_eq!(state.step, WizardStep::SlackCredentials);
+        state.back();
+        assert_eq!(state.step, WizardStep::LlmSetup);
         state.back();
         assert_eq!(state.step, WizardStep::TierSelection);
         state.back();
@@ -245,7 +306,135 @@ mod tests {
             let mut state = filled_state();
             state.tier = Some(tier);
             state.advance().unwrap();
-            assert_eq!(state.step, WizardStep::SlackCredentials);
+            assert_eq!(state.step, WizardStep::LlmSetup);
+        }
+    }
+
+    // ─── LLM Setup Validation ────────────────────────────────────────────
+
+    #[test]
+    fn rejects_missing_provider() {
+        let mut state = filled_state();
+        state.model_provider = None;
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn rejects_empty_api_key_for_anthropic() {
+        let mut state = filled_state();
+        state.model_api_key = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn rejects_empty_api_key_for_openai() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Openai);
+        state.model_api_key = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn rejects_empty_bedrock_credentials() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Bedrock);
+        state.model_api_key = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn rejects_bedrock_without_region() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Bedrock);
+        state.model_api_key = "some-key".to_string();
+        state.aws_region = String::new();
+        state.model_frontier = "us.anthropic.claude-sonnet-4-20250514-v1:0".to_string();
+        state.model_fast = "us.anthropic.claude-haiku-4-20250514-v1:0".to_string();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn accepts_bedrock_with_key_and_region() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Bedrock);
+        state.model_api_key = "some-api-key".to_string();
+        state.aws_region = "us-east-1".to_string();
+        state.model_frontier = "us.anthropic.claude-sonnet-4-20250514-v1:0".to_string();
+        state.model_fast = "us.anthropic.claude-haiku-4-20250514-v1:0".to_string();
+        state.step = WizardStep::LlmSetup;
+
+        state.advance().unwrap();
+        assert_eq!(state.step, WizardStep::SlackCredentials);
+    }
+
+    #[test]
+    fn rejects_custom_without_base_url() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Custom);
+        state.model_base_url = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn accepts_custom_with_base_url_and_key() {
+        let mut state = filled_state();
+        state.model_provider = Some(ModelProvider::Custom);
+        state.model_base_url = "http://localhost:11434/v1".to_string();
+        state.model_api_key = "custom-key".to_string();
+        state.model_frontier = "llama3".to_string();
+        state.model_fast = "llama3".to_string();
+        state.step = WizardStep::LlmSetup;
+
+        state.advance().unwrap();
+        assert_eq!(state.step, WizardStep::SlackCredentials);
+    }
+
+    #[test]
+    fn rejects_empty_frontier_model() {
+        let mut state = filled_state();
+        state.model_frontier = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn rejects_empty_fast_model() {
+        let mut state = filled_state();
+        state.model_fast = String::new();
+        state.step = WizardStep::LlmSetup;
+
+        let result = state.advance();
+        assert!(matches!(result, Err(WizardValidationError::Required(_))));
+    }
+
+    #[test]
+    fn accepts_any_nonempty_api_key() {
+        let keys = ["sk-ant-123", "sk-proj-abc", "key_12345", "x"];
+        for key in keys {
+            let mut state = filled_state();
+            state.model_api_key = key.to_string();
+            state.step = WizardStep::LlmSetup;
+            state.advance().unwrap();
         }
     }
 
@@ -350,29 +539,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ─── Model Provider Validation ───────────────────────────────────────
-
-    #[test]
-    fn rejects_empty_api_key() {
-        let mut state = filled_state();
-        state.model_api_key = String::new();
-        state.step = WizardStep::ModelProvider;
-
-        let result = state.advance();
-        assert!(matches!(result, Err(WizardValidationError::Required(_))));
-    }
-
-    #[test]
-    fn accepts_any_nonempty_api_key() {
-        let keys = ["sk-ant-123", "sk-proj-abc", "key_12345", "x"];
-        for key in keys {
-            let mut state = filled_state();
-            state.model_api_key = key.to_string();
-            state.step = WizardStep::ModelProvider;
-            state.advance().unwrap();
-        }
-    }
-
     // ─── Company Info Validation ─────────────────────────────────────────
 
     #[test]
@@ -387,12 +553,10 @@ mod tests {
 
     #[test]
     fn accepts_whitespace_only_company_name_as_valid() {
-        // " " is not empty, validation just checks .is_empty()
         let mut state = filled_state();
         state.company_name = " ".to_string();
         state.step = WizardStep::CompanyInfo;
 
-        // This should pass since we only check is_empty
         state.advance().unwrap();
     }
 
@@ -420,8 +584,8 @@ mod tests {
     fn into_answers_fails_before_review() {
         let steps = [
             WizardStep::TierSelection,
+            WizardStep::LlmSetup,
             WizardStep::SlackCredentials,
-            WizardStep::ModelProvider,
             WizardStep::CompanyInfo,
         ];
 
@@ -491,12 +655,10 @@ mod tests {
     }
 
     #[test]
-    fn default_models_are_set() {
+    fn default_models_are_empty() {
         let state = WizardState::default();
-        assert!(!state.model_frontier.is_empty());
-        assert!(!state.model_fast.is_empty());
-        assert!(state.model_frontier.contains("claude"));
-        assert!(state.model_fast.contains("claude"));
+        assert!(state.model_frontier.is_empty());
+        assert!(state.model_fast.is_empty());
     }
 
     // ─── Stress: Rapid Back/Forward ──────────────────────────────────────

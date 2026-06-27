@@ -155,12 +155,15 @@ mod tests {
                 socket_mode: false,
             },
             models: ModelConfig {
+                provider: crate::config::ModelProvider::Anthropic,
                 frontier: "custom-frontier".to_string(),
                 fast: "custom-fast".to_string(),
                 api_key: EncryptedValue {
                     ciphertext: "ct4".to_string(),
                     recipient: "r4".to_string(),
                 },
+                base_url: None,
+                aws_region: None,
             },
             gbrain: GBrainConfig {
                 directory: PathBuf::from("/custom/gbrain"),

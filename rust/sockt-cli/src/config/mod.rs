@@ -18,6 +18,32 @@ pub enum ConfigError {
     Yaml(#[from] serde_yaml::Error),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelProvider {
+    Anthropic,
+    Openai,
+    Bedrock,
+    Custom,
+}
+
+impl Default for ModelProvider {
+    fn default() -> Self {
+        Self::Anthropic
+    }
+}
+
+impl std::fmt::Display for ModelProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Anthropic => write!(f, "anthropic"),
+            Self::Openai => write!(f, "openai"),
+            Self::Bedrock => write!(f, "bedrock"),
+            Self::Custom => write!(f, "custom"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SocktConfig {
     #[serde(default = "default_version")]
@@ -78,11 +104,17 @@ impl Default for SlackConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
+    #[serde(default)]
+    pub provider: ModelProvider,
     #[serde(default = "default_frontier")]
     pub frontier: String,
     #[serde(default = "default_fast")]
     pub fast: String,
     pub api_key: EncryptedValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aws_region: Option<String>,
 }
 
 fn default_frontier() -> String {
@@ -96,9 +128,12 @@ fn default_fast() -> String {
 impl Default for ModelConfig {
     fn default() -> Self {
         Self {
+            provider: ModelProvider::default(),
             frontier: default_frontier(),
             fast: default_fast(),
             api_key: EncryptedValue::default(),
+            base_url: None,
+            aws_region: None,
         }
     }
 }
@@ -208,12 +243,15 @@ mod tests {
                 socket_mode: true,
             },
             models: ModelConfig {
+                provider: ModelProvider::Anthropic,
                 frontier: "claude-sonnet-4-20250514".to_string(),
                 fast: "claude-haiku-4-20250514".to_string(),
                 api_key: EncryptedValue {
                     ciphertext: "enc_key".to_string(),
                     recipient: "age1recipient".to_string(),
                 },
+                base_url: None,
+                aws_region: None,
             },
             gbrain: GBrainConfig::default(),
         };
@@ -226,6 +264,7 @@ mod tests {
         assert_eq!(parsed.deployment_id, config.deployment_id);
         assert_eq!(parsed.slack.app_token.ciphertext, "enc_app");
         assert_eq!(parsed.models.frontier, "claude-sonnet-4-20250514");
+        assert_eq!(parsed.models.provider, ModelProvider::Anthropic);
     }
 
     #[test]

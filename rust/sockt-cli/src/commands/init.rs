@@ -5,9 +5,12 @@ use anyhow::Context;
 use crate::cli::{InitArgs, Tier};
 use crate::compose::ComposeGenerator;
 use crate::config::loader::ConfigLoader;
-use crate::config::{EncryptedValue, GBrainConfig, ModelConfig, SlackConfig, SocktConfig};
+use crate::config::{
+    EncryptedValue, GBrainConfig, ModelConfig, ModelProvider, SlackConfig, SocktConfig,
+};
 use crate::crypto::{self, KeyManager};
 use crate::gbrain::{GBrainScaffolder, OnboardingAnswers};
+use crate::tui::llm_verify;
 use crate::tui::wizard::WizardState;
 
 struct SlackTokens {
@@ -17,9 +20,12 @@ struct SlackTokens {
 }
 
 struct ModelInfo {
+    provider: ModelProvider,
     api_key: String,
     frontier: String,
     fast: String,
+    base_url: Option<String>,
+    aws_region: Option<String>,
 }
 
 pub async fn run(args: InitArgs, config_path: Option<PathBuf>) -> anyhow::Result<()> {
@@ -47,7 +53,7 @@ pub async fn run(args: InitArgs, config_path: Option<PathBuf>) -> anyhow::Result
     let (tier, slack_tokens, model_info, answers) = if args.non_interactive {
         collect_non_interactive(&args)
     } else {
-        collect_interactive(&args)?
+        collect_interactive(&args).await?
     };
 
     let key_manager = KeyManager::new(KeyManager::default_path());
@@ -106,29 +112,46 @@ fn collect_non_interactive(args: &InitArgs) -> (Tier, SlackTokens, ModelInfo, On
         signing_secret: String::new(),
     };
     let model_info = ModelInfo {
+        provider: ModelProvider::Anthropic,
         api_key: String::new(),
         frontier: "claude-sonnet-4-20250514".to_string(),
         fast: "claude-haiku-4-20250514".to_string(),
+        base_url: None,
+        aws_region: None,
     };
     (tier, slack_tokens, model_info, OnboardingAnswers::default())
 }
 
-fn collect_interactive(
+async fn collect_interactive(
     args: &InitArgs,
 ) -> anyhow::Result<(Tier, SlackTokens, ModelInfo, OnboardingAnswers)> {
+    use crossterm::style::Stylize;
+
     println!();
-    println!("  Welcome to Sockt \u{2014} AI departments that never bankrupt you or embarrass you.");
+    println!(
+        "  {} {}",
+        "\u{2728}".to_string(),
+        "Welcome to Sockt \u{2014} AI departments that never bankrupt you or embarrass you."
+            .bold()
+    );
     println!();
 
     let mut state = WizardState::default();
 
-    // Step 1: Tier
+    // ─── Step 1: Tier ────────────────────────────────────────────────────
+    llm_verify::print_header("Deployment Tier");
+    println!();
+
     if let Some(tier) = &args.tier {
         state.tier = Some(tier.clone());
     } else {
-        let items = vec!["local", "cloud", "enterprise"];
+        let items = vec![
+            "local   — run everything on this machine",
+            "cloud   — managed deployment",
+            "enterprise — custom infrastructure",
+        ];
         let selection = dialoguer::Select::new()
-            .with_prompt("  Deployment tier")
+            .with_prompt("  Select tier")
             .items(&items)
             .default(0)
             .interact()
@@ -143,7 +166,178 @@ fn collect_interactive(
         .advance()
         .map_err(|e| anyhow::anyhow!("Tier selection: {e}"))?;
 
-    // Step 2: Slack credentials — guided setup
+    // ─── Step 2: LLM Configuration ──────────────────────────────────────
+    println!();
+    llm_verify::print_header("LLM Configuration");
+    println!();
+    llm_verify::print_hint("Configure the AI models that power your agents.");
+    println!();
+
+    'llm_loop: loop {
+        // Provider selection
+        let provider_items = vec![
+            "Anthropic (Claude)",
+            "OpenAI (GPT)",
+            "Amazon Bedrock (AWS)",
+            "Custom URL (OpenAI-compatible)",
+        ];
+        let provider_idx = dialoguer::Select::new()
+            .with_prompt("  Provider")
+            .items(&provider_items)
+            .default(0)
+            .interact()
+            .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+        state.model_provider = Some(match provider_idx {
+            0 => ModelProvider::Anthropic,
+            1 => ModelProvider::Openai,
+            2 => ModelProvider::Bedrock,
+            _ => ModelProvider::Custom,
+        });
+
+        println!();
+
+        // Credentials based on provider
+        match state.model_provider.as_ref().unwrap() {
+            ModelProvider::Anthropic => {
+                llm_verify::print_hint("Get your API key at https://platform.claude.com/settings/keys");
+                state.model_api_key = dialoguer::Password::new()
+                    .with_prompt("  API key")
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+            }
+            ModelProvider::Openai => {
+                llm_verify::print_hint("Get your API key at https://platform.openai.com/api-keys");
+                state.model_api_key = dialoguer::Password::new()
+                    .with_prompt("  API key")
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+            }
+            ModelProvider::Bedrock => {
+                llm_verify::print_hint("Enter your API key and region for Bedrock access.");
+                state.model_api_key = dialoguer::Password::new()
+                    .with_prompt("  API key")
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+                state.aws_region = dialoguer::Input::new()
+                    .with_prompt("  AWS Region")
+                    .default("us-east-1".to_string())
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+            }
+            ModelProvider::Custom => {
+                llm_verify::print_hint("Enter the base URL of your OpenAI-compatible endpoint.");
+                state.model_base_url = dialoguer::Input::new()
+                    .with_prompt("  Base URL")
+                    .default("http://localhost:11434/v1".to_string())
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+                state.model_api_key = dialoguer::Password::new()
+                    .with_prompt("  API key")
+                    .allow_empty_password(true)
+                    .interact()
+                    .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+                if state.model_api_key.is_empty() {
+                    state.model_api_key = "none".to_string();
+                }
+            }
+        }
+
+        println!();
+
+        // Frontier model selection + inline verify
+        let provider = state.model_provider.as_ref().unwrap().clone();
+        let base_url = if state.model_base_url.is_empty() {
+            None
+        } else {
+            Some(state.model_base_url.as_str())
+        };
+        let aws_region = if state.model_provider == Some(ModelProvider::Bedrock) {
+            Some(state.aws_region.as_str())
+        } else {
+            None
+        };
+
+        state.model_frontier = select_model(
+            "Frontier model (complex tasks)",
+            &provider,
+            true,
+        )?;
+
+        let frontier_result = llm_verify::verify_model_inline(
+            &provider,
+            &state.model_api_key,
+            base_url,
+            &state.model_frontier,
+            aws_region,
+        )
+        .await;
+
+        if frontier_result.is_err() {
+            println!();
+            let retry_items = vec!["Re-enter credentials", "Skip and continue"];
+            let action = dialoguer::Select::new()
+                .with_prompt("  What would you like to do?")
+                .items(&retry_items)
+                .default(0)
+                .interact()
+                .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+            if action == 0 {
+                println!();
+                continue 'llm_loop;
+            }
+        }
+
+        // Fast model selection + inline verify
+        state.model_fast = select_model(
+            "Fast model (quick tasks)",
+            &provider,
+            false,
+        )?;
+
+        let fast_result = llm_verify::verify_model_inline(
+            &provider,
+            &state.model_api_key,
+            base_url,
+            &state.model_fast,
+            aws_region,
+        )
+        .await;
+
+        if fast_result.is_err() {
+            println!();
+            let retry_items = vec!["Re-enter credentials", "Skip and continue"];
+            let action = dialoguer::Select::new()
+                .with_prompt("  What would you like to do?")
+                .items(&retry_items)
+                .default(0)
+                .interact()
+                .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+
+            if action == 0 {
+                println!();
+                continue 'llm_loop;
+            }
+        }
+
+        state.model_verified = frontier_result.is_ok() && fast_result.is_ok();
+
+        match state.advance() {
+            Ok(()) => break,
+            Err(e) => {
+                println!();
+                llm_verify::print_error(&format!("{e}. Please try again."));
+                println!();
+            }
+        }
+    }
+
+    // ─── Step 3: Slack credentials ───────────────────────────────────────
+    println!();
+    llm_verify::print_header("Slack Integration");
+    println!();
+
     let has_app = dialoguer::Confirm::new()
         .with_prompt("  Do you already have a Slack app configured for Sockt?")
         .default(false)
@@ -152,8 +346,12 @@ fn collect_interactive(
 
     if !has_app {
         println!();
-        println!("  Let's create your Slack app using a pre-configured manifest.");
-        println!("  This sets up Socket Mode, event subscriptions, and bot scopes automatically.");
+        llm_verify::print_hint(
+            "Let's create your Slack app using a pre-configured manifest.",
+        );
+        llm_verify::print_hint(
+            "This sets up Socket Mode, event subscriptions, and bot scopes automatically.",
+        );
         println!();
 
         let open_browser = dialoguer::Confirm::new()
@@ -165,7 +363,9 @@ fn collect_interactive(
         if open_browser {
             println!();
             println!("  Opening Slack...");
-            println!("  Select your workspace and click 'Create' to provision the app.");
+            llm_verify::print_hint(
+                "Select your workspace and click 'Create' to provision the app.",
+            );
             println!();
             super::slack_setup::open_creation_page();
         } else {
@@ -207,42 +407,17 @@ fn collect_interactive(
         match state.advance() {
             Ok(()) => break,
             Err(e) => {
-                println!("  Error: {e}. Please try again.");
+                llm_verify::print_error(&format!("{e}. Please try again."));
                 println!();
             }
         }
     }
 
-    // Step 3: Model provider
-    loop {
-        state.model_api_key = dialoguer::Password::new()
-            .with_prompt("  LLM API key")
-            .allow_empty_password(true)
-            .interact()
-            .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+    // ─── Step 4: Company info ────────────────────────────────────────────
+    println!();
+    llm_verify::print_header("Company & Preferences");
+    println!();
 
-        state.model_frontier = dialoguer::Input::new()
-            .with_prompt("  Frontier model")
-            .default("claude-sonnet-4-20250514".to_string())
-            .interact()
-            .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
-
-        state.model_fast = dialoguer::Input::new()
-            .with_prompt("  Fast model")
-            .default("claude-haiku-4-20250514".to_string())
-            .interact()
-            .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
-
-        match state.advance() {
-            Ok(()) => break,
-            Err(e) => {
-                println!("  Error: {e}. Please try again.");
-                println!();
-            }
-        }
-    }
-
-    // Step 4: Company info
     loop {
         state.company_name = dialoguer::Input::new()
             .with_prompt("  Company name")
@@ -300,23 +475,42 @@ fn collect_interactive(
         match state.advance() {
             Ok(()) => break,
             Err(e) => {
-                println!("  Error: {e}. Please try again.");
+                llm_verify::print_error(&format!("{e}. Please try again."));
                 println!();
             }
         }
     }
 
-    // Step 5: Review
+    // ─── Step 5: Review ──────────────────────────────────────────────────
     println!();
-    println!("  --- Review ---");
-    println!("  Tier:             {:?}", state.tier.as_ref().unwrap());
-    println!("  Company:          {}", state.company_name);
-    println!("  Industry:         {}", state.industry);
-    println!("  Frontier model:   {}", state.model_frontier);
-    println!("  Fast model:       {}", state.model_fast);
-    println!("  Tools:            {}", state.tools_used.join(", "));
-    println!("  Tone:             {}", state.tone);
-    println!("  Approval:         {}", state.approval_threshold);
+    llm_verify::print_header("Review");
+    println!();
+    println!(
+        "  {}        {:?}",
+        "Tier:".bold(),
+        state.tier.as_ref().unwrap()
+    );
+    println!(
+        "  {}    {}",
+        "Provider:".bold(),
+        state.model_provider.as_ref().unwrap()
+    );
+    println!("  {}    {}", "Frontier:".bold(), state.model_frontier);
+    println!("  {}        {}", "Fast:".bold(), state.model_fast);
+    if state.model_verified {
+        println!("  {}    {}", "Verified:".bold(), "yes".green());
+    } else {
+        println!("  {}    {}", "Verified:".bold(), "no (skipped)".dark_grey());
+    }
+    println!("  {}     {}", "Company:".bold(), state.company_name);
+    println!("  {}    {}", "Industry:".bold(), state.industry);
+    println!(
+        "  {}       {}",
+        "Tools:".bold(),
+        state.tools_used.join(", ")
+    );
+    println!("  {}        {}", "Tone:".bold(), state.tone);
+    println!("  {}    {}", "Approval:".bold(), state.approval_threshold);
     println!();
 
     let confirmed = dialoguer::Confirm::new()
@@ -336,15 +530,38 @@ fn collect_interactive(
         signing_secret: state.slack_signing_secret.clone(),
     };
     let model_info = ModelInfo {
+        provider: state.model_provider.clone().unwrap(),
         api_key: state.model_api_key.clone(),
         frontier: state.model_frontier.clone(),
         fast: state.model_fast.clone(),
+        base_url: if state.model_base_url.is_empty() {
+            None
+        } else {
+            Some(state.model_base_url.clone())
+        },
+        aws_region: if state.aws_region.is_empty() {
+            None
+        } else {
+            Some(state.aws_region.clone())
+        },
     };
     let answers = state
         .into_answers()
         .map_err(|e| anyhow::anyhow!("Wizard incomplete: {e}"))?;
 
     Ok((tier, slack_tokens, model_info, answers))
+}
+
+fn select_model(
+    prompt: &str,
+    _provider: &ModelProvider,
+    _is_frontier: bool,
+) -> anyhow::Result<String> {
+    let model: String = dialoguer::Input::new()
+        .with_prompt(format!("  {}", prompt))
+        .interact()
+        .map_err(|_| anyhow::anyhow!("Initialization cancelled."))?;
+    Ok(model)
 }
 
 fn encrypt_slack(
@@ -381,8 +598,11 @@ fn build_model_config(
     };
 
     Ok(ModelConfig {
+        provider: info.provider.clone(),
         frontier: info.frontier.clone(),
         fast: info.fast.clone(),
         api_key,
+        base_url: info.base_url.clone(),
+        aws_region: info.aws_region.clone(),
     })
 }
