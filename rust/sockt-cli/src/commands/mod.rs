@@ -1,9 +1,12 @@
 mod brain;
+pub(crate) mod checks;
 mod config_cmd;
 mod connect;
 mod deploy;
+mod doctor;
 mod down;
 mod export;
+mod health;
 mod init;
 mod logs;
 mod secrets;
@@ -37,5 +40,7 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Export(args) => export::run(args, cli.config).await,
         Command::Secrets(args) => secrets::run(args, cli.config).await,
         Command::Logs(args) => logs::run(args, cli.config).await,
+        Command::Health(args) => health::run(args, cli.config).await,
+        Command::Doctor(args) => doctor::run(args, cli.config).await,
     }
 }

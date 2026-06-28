@@ -101,8 +101,8 @@ fn all_commands_respond_to_help() {
 
 #[test]
 fn global_flags_work_with_all_commands() {
-    // Exclude config since it actually needs a valid config file
-    let commands = ["up", "down", "status", "tasks", "brain", "connect", "export"];
+    // Exclude config (needs valid config file) and up/down (deprecated aliases that trigger deploy/stop)
+    let commands = ["status", "tasks", "brain", "connect", "export"];
 
     for cmd in commands {
         sockt()
@@ -116,10 +116,8 @@ fn global_flags_work_with_all_commands() {
 
 #[test]
 fn success_commands_exit_zero() {
-    // Exclude config since it needs a valid config file to succeed
+    // Exclude config (needs valid config) and up/down (deprecated aliases that trigger deploy/stop)
     let commands = vec![
-        vec!["up"],
-        vec!["down"],
         vec!["status"],
         vec!["tasks"],
         vec!["brain"],

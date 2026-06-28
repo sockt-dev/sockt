@@ -50,6 +50,10 @@ pub enum Command {
     Secrets(SecretsArgs),
     /// View agent logs
     Logs(LogsArgs),
+    /// Runtime health diagnostics
+    Health(HealthArgs),
+    /// Pre-flight environment check
+    Doctor(DoctorArgs),
 }
 
 #[derive(Args)]
@@ -401,6 +405,24 @@ pub enum SecretsCommand {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+}
+
+#[derive(Args)]
+pub struct HealthArgs {
+    /// Machine-readable JSON output
+    #[arg(long)]
+    pub json: bool,
+
+    /// Attempt auto-repair of common issues
+    #[arg(long)]
+    pub fix: bool,
+}
+
+#[derive(Args)]
+pub struct DoctorArgs {
+    /// Machine-readable JSON output
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
