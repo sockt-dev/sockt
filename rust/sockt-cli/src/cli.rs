@@ -253,12 +253,86 @@ pub struct BrainArgs {
 
 #[derive(Subcommand)]
 pub enum BrainCommand {
-    /// Show GBrain status
-    Status,
-    /// Edit SOUL.md
-    EditSoul,
-    /// Edit AGENTS.md
-    EditAgents,
+    /// Full-text search across GBrain
+    Search {
+        /// Search query
+        query: String,
+        /// Limit to matching files (e.g. "skills/*")
+        #[arg(long)]
+        file: Option<String>,
+        /// Lines of context around match
+        #[arg(long, default_value = "2")]
+        context: usize,
+        /// Max results
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+    /// Git commit history of GBrain
+    Log {
+        /// Filter by commit author (agent name)
+        #[arg(long)]
+        agent: Option<String>,
+        /// Time filter (e.g. "1d", "2h")
+        #[arg(long)]
+        since: Option<String>,
+        /// Max commits
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Compact one-line-per-commit format
+        #[arg(long)]
+        oneline: bool,
+    },
+    /// Display a GBrain file with syntax highlighting
+    Show {
+        /// File path relative to GBrain root
+        file: String,
+        /// No highlighting, raw content
+        #[arg(long)]
+        raw: bool,
+        /// Show specific lines (e.g. "10-30")
+        #[arg(long)]
+        line: Option<String>,
+    },
+    /// Open file in $EDITOR
+    Edit {
+        /// File path relative to GBrain root
+        file: String,
+    },
+    /// Show recent changes (git diff)
+    Diff {
+        /// Compare point — commit hash or duration (default: "1d")
+        #[arg(long, default_value = "1d")]
+        since: String,
+        /// File-level summary only
+        #[arg(long)]
+        stat: bool,
+    },
+    /// Skill management
+    Skills {
+        #[command(subcommand)]
+        command: Option<SkillsCommand>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SkillsCommand {
+    /// List all skills with status
+    List,
+    /// Display skill file content
+    Show {
+        /// Skill name
+        name: String,
+    },
+    /// Move pending-review skill to production
+    Approve {
+        /// Skill name
+        name: String,
+    },
+    /// Delete a pending skill
+    Reject {
+        /// Skill name
+        name: String,
+    },
 }
 
 #[derive(Args)]
