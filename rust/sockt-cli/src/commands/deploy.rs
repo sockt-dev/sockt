@@ -12,12 +12,12 @@ use crate::runtime::{
     RuntimeState, ServicePid,
 };
 
-struct ServiceConfig {
-    name: String,
-    package_path: String,
-    port: Option<u16>,
-    health_endpoint: Option<String>,
-    env_vars: HashMap<String, String>,
+pub(crate) struct ServiceConfig {
+    pub(crate) name: String,
+    pub(crate) package_path: String,
+    pub(crate) port: Option<u16>,
+    pub(crate) health_endpoint: Option<String>,
+    pub(crate) env_vars: HashMap<String, String>,
 }
 
 /// Main entry point for deploy command
@@ -153,7 +153,7 @@ fn ensure_scratch_dir() -> Result<()> {
 // Service Configuration
 // ============================================================================
 
-fn build_service_configs(
+pub(crate) fn build_service_configs(
     config: &SocktConfig,
     department: Option<&str>,
 ) -> Result<Vec<ServiceConfig>> {
@@ -340,7 +340,7 @@ fn create_agent_configs(
 // Service Spawning
 // ============================================================================
 
-async fn spawn_with_health(config: &ServiceConfig, timeout: u64) -> Result<ServicePid> {
+pub(crate) async fn spawn_with_health(config: &ServiceConfig, timeout: u64) -> Result<ServicePid> {
     use std::time::Instant;
 
     print!("    {:<15} starting → ", config.name);
@@ -381,7 +381,7 @@ async fn poll_health_with_progress(url: &str, timeout_secs: u64) -> Result<()> {
     }
 }
 
-fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
+pub(crate) fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
     println!("    {:<15} starting... [daemon]", config.name);
 
     spawn_bun_service(&config.package_path, config.env_vars.clone(), &config.name)

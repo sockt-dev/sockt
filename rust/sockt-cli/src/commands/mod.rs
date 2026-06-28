@@ -2,7 +2,7 @@ mod brain;
 pub(crate) mod checks;
 mod config_cmd;
 mod connect;
-mod deploy;
+pub(crate) mod deploy;
 mod doctor;
 mod down;
 mod export;
@@ -13,6 +13,7 @@ mod secrets;
 mod setup;
 pub(crate) mod slack_setup;
 mod status;
+mod restart;
 mod stop;
 mod tasks;
 mod up;
@@ -31,6 +32,7 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Down(args) => down::run(args, cli.config).await,
         Command::Stop(args) => stop::run(args, cli.config).await,
+        Command::Restart(args) => restart::run(args, cli.config).await,
         Command::Status(args) => status::run(args, cli.config).await,
         Command::Tasks(args) => tasks::run(args, cli.config).await,
         Command::Brain(args) => brain::run(args, cli.config).await,

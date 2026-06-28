@@ -32,6 +32,8 @@ pub enum Command {
     Down(DownArgs),
     /// Stop the swarm (graceful shutdown)
     Stop(StopArgs),
+    /// Restart one or all services (stop + re-deploy)
+    Restart(RestartArgs),
     /// Show deployment status
     Status(StatusArgs),
     /// List and manage tasks
@@ -139,6 +141,20 @@ pub struct StopArgs {
 
     /// Max seconds to wait for graceful shutdown
     #[arg(long, default_value = "30")]
+    pub timeout: u64,
+}
+
+#[derive(Args)]
+pub struct RestartArgs {
+    /// Agent to restart (omit for all). Accepts human names (e.g. "lead-researcher") or service names.
+    pub agent: Option<String>,
+
+    /// Full stop + start (SIGKILL, guarantees clean state)
+    #[arg(long)]
+    pub hard: bool,
+
+    /// Max seconds to wait for healthy state
+    #[arg(long, default_value = "60")]
     pub timeout: u64,
 }
 
