@@ -175,6 +175,7 @@ mod tests {
                 agents_file: "CUSTOM_AGENTS.md".to_string(),
             },
             integrations: Default::default(),
+            departments: Default::default(),
         };
 
         loader.save(&config).unwrap();

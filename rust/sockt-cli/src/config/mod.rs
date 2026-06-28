@@ -61,6 +61,8 @@ pub struct SocktConfig {
     pub gbrain: GBrainConfig,
     #[serde(default)]
     pub integrations: IntegrationsConfig,
+    #[serde(default)]
+    pub departments: DepartmentsConfig,
 }
 
 fn default_version() -> String {
@@ -81,6 +83,7 @@ impl Default for SocktConfig {
             models: ModelConfig::default(),
             gbrain: GBrainConfig::default(),
             integrations: IntegrationsConfig::default(),
+            departments: DepartmentsConfig::default(),
         }
     }
 }
@@ -245,6 +248,12 @@ pub struct ApolloConfig {
     pub api_key: EncryptedValue,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DepartmentsConfig {
+    #[serde(default)]
+    pub active: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,6 +335,7 @@ mod tests {
             },
             gbrain: GBrainConfig::default(),
             integrations: Default::default(),
+            departments: Default::default(),
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();

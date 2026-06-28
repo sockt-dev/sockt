@@ -40,6 +40,8 @@ pub enum Command {
     Tasks(TasksArgs),
     /// Manage GBrain knowledge base
     Brain(BrainArgs),
+    /// Manage agent departments
+    Department(DepartmentArgs),
     /// View/edit configuration
     Config(ConfigArgs),
     /// Connect to a running agent session
@@ -644,4 +646,44 @@ pub struct LogsArgs {
     /// Show raw logs (fallback/debug mode)
     #[arg(long)]
     pub raw: bool,
+}
+
+#[derive(Args)]
+pub struct DepartmentArgs {
+    #[command(subcommand)]
+    pub command: Option<DepartmentCommand>,
+}
+
+#[derive(Subcommand)]
+pub enum DepartmentCommand {
+    /// List all available department templates
+    List {
+        /// Only show templates not yet deployed
+        #[arg(long)]
+        available: bool,
+    },
+    /// Add a department to your deployment
+    Add {
+        name: String,
+        /// Use defaults (no integration prompts)
+        #[arg(long)]
+        non_interactive: bool,
+    },
+    /// Remove a department
+    Remove {
+        name: String,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        confirm: bool,
+        /// Preserve GBrain data from this department
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        keep_data: bool,
+    },
+    /// Detailed department view
+    Info {
+        name: String,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+    },
 }
