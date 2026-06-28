@@ -400,3 +400,122 @@ async fn test_base_url_trailing_slash_stripped() {
     // This is tested implicitly - if it doesn't strip, URLs like "http://127.0.0.1:3200//health" would be malformed
     assert!(true);
 }
+
+// Phase 5: HITL Workflow Operations
+
+#[tokio::test]
+async fn test_approve_task_without_comment() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 274\r\nConnection: close\r\n\r\n{\"id\":\"task-142\",\"tenantId\":\"tenant-1\",\"status\":\"approved\",\"owner\":\"agent-1\",\"parentId\":null,\"description\":\"Send email\",\"output\":null,\"llmCallsUsed\":0,\"llmCallsBudget\":25,\"attemptCount\":0,\"maxAttempts\":3,\"createdAt\":\"2026-06-27T14:23:08Z\",\"updatedAt\":\"2026-06-27T14:25:00Z\"}";
+        let _ = socket.write_all(response).await;
+        let _ = socket.shutdown().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client = test_client(port);
+    let task = client.approve_task("task-142", None).await.unwrap();
+
+    assert_eq!(task.id, "task-142");
+    assert_eq!(task.status, "approved");
+}
+
+#[tokio::test]
+async fn test_approve_task_with_comment() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 274\r\nConnection: close\r\n\r\n{\"id\":\"task-142\",\"tenantId\":\"tenant-1\",\"status\":\"approved\",\"owner\":\"agent-1\",\"parentId\":null,\"description\":\"Send email\",\"output\":null,\"llmCallsUsed\":0,\"llmCallsBudget\":25,\"attemptCount\":0,\"maxAttempts\":3,\"createdAt\":\"2026-06-27T14:23:08Z\",\"updatedAt\":\"2026-06-27T14:25:00Z\"}";
+        let _ = socket.write_all(response).await;
+        let _ = socket.shutdown().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client = test_client(port);
+    let task = client
+        .approve_task("task-142", Some("looks good"))
+        .await
+        .unwrap();
+
+    assert_eq!(task.id, "task-142");
+    assert_eq!(task.status, "approved");
+}
+
+#[tokio::test]
+async fn test_reject_task_with_reason() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 274\r\nConnection: close\r\n\r\n{\"id\":\"task-142\",\"tenantId\":\"tenant-1\",\"status\":\"rejected\",\"owner\":\"agent-1\",\"parentId\":null,\"description\":\"Send email\",\"output\":null,\"llmCallsUsed\":0,\"llmCallsBudget\":25,\"attemptCount\":1,\"maxAttempts\":3,\"createdAt\":\"2026-06-27T14:23:08Z\",\"updatedAt\":\"2026-06-27T14:26:00Z\"}";
+        let _ = socket.write_all(response).await;
+        let _ = socket.shutdown().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client = test_client(port);
+    let task = client
+        .reject_task("task-142", Some("tone is too salesy"))
+        .await
+        .unwrap();
+
+    assert_eq!(task.id, "task-142");
+    assert_eq!(task.status, "rejected");
+}
+
+#[tokio::test]
+async fn test_cancel_task_success() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 276\r\nConnection: close\r\n\r\n{\"id\":\"task-156\",\"tenantId\":\"tenant-1\",\"status\":\"cancelled\",\"owner\":\"agent-2\",\"parentId\":null,\"description\":\"Lead search\",\"output\":null,\"llmCallsUsed\":3,\"llmCallsBudget\":25,\"attemptCount\":1,\"maxAttempts\":3,\"createdAt\":\"2026-06-27T14:58:00Z\",\"updatedAt\":\"2026-06-27T15:00:00Z\"}";
+        let _ = socket.write_all(response).await;
+        let _ = socket.shutdown().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client = test_client(port);
+    let task = client.cancel_task("task-156").await.unwrap();
+
+    assert_eq!(task.id, "task-156");
+    assert_eq!(task.status, "cancelled");
+}
+
+#[tokio::test]
+async fn test_retry_task_with_priority() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 289\r\nConnection: close\r\n\r\n{\"id\":\"task-148\",\"tenantId\":\"tenant-1\",\"status\":\"pending\",\"owner\":null,\"parentId\":null,\"description\":\"Lead enrichment\",\"output\":\"Apollo API timeout\",\"llmCallsUsed\":2,\"llmCallsBudget\":25,\"attemptCount\":2,\"maxAttempts\":3,\"createdAt\":\"2026-06-27T13:00:00Z\",\"updatedAt\":\"2026-06-27T15:01:00Z\"}";
+        let _ = socket.write_all(response).await;
+        let _ = socket.shutdown().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client = test_client(port);
+    let task = client.retry_task("task-148", Some("high")).await.unwrap();
+
+    assert_eq!(task.id, "task-148");
+    assert_eq!(task.status, "pending");
+    assert_eq!(task.attempt_count, 2);
+}

@@ -52,6 +52,13 @@ pub struct Task {
     pub created_at: String,
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    // HITL-specific fields
+    #[serde(rename = "actionPayload", skip_serializing_if = "Option::is_none")]
+    pub action_payload: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
+    #[serde(rename = "expiresAt", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -147,6 +154,39 @@ impl OrchClient {
     pub async fn record_llm_call(&self, task_id: &str) -> Result<LlmCallResult> {
         let path = format!("/tasks/{}/llm-call", task_id);
         self.post(&path, Some(serde_json::json!({}))).await
+    }
+
+    // HITL workflow methods
+    pub async fn approve_task(&self, task_id: &str, comment: Option<&str>) -> Result<Task> {
+        let path = format!("/tasks/{}/approve", task_id);
+        let mut body = serde_json::json!({});
+        if let Some(c) = comment {
+            body["comment"] = serde_json::Value::String(c.to_string());
+        }
+        self.post(&path, Some(body)).await
+    }
+
+    pub async fn reject_task(&self, task_id: &str, reason: Option<&str>) -> Result<Task> {
+        let path = format!("/tasks/{}/reject", task_id);
+        let mut body = serde_json::json!({});
+        if let Some(r) = reason {
+            body["reason"] = serde_json::Value::String(r.to_string());
+        }
+        self.post(&path, Some(body)).await
+    }
+
+    pub async fn cancel_task(&self, task_id: &str) -> Result<Task> {
+        let path = format!("/tasks/{}/cancel", task_id);
+        self.post(&path, Some(serde_json::json!({}))).await
+    }
+
+    pub async fn retry_task(&self, task_id: &str, priority: Option<&str>) -> Result<Task> {
+        let path = format!("/tasks/{}/retry", task_id);
+        let mut body = serde_json::json!({});
+        if let Some(p) = priority {
+            body["priority"] = serde_json::Value::String(p.to_string());
+        }
+        self.post(&path, Some(body)).await
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {

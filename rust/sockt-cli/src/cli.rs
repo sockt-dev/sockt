@@ -187,10 +187,62 @@ pub struct TasksArgs {
 
 #[derive(Subcommand)]
 pub enum TasksCommand {
-    /// List all tasks
-    List,
+    /// List all tasks (default)
+    List(ListArgs),
     /// Show task details
-    Show { id: String },
+    Show {
+        id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Approve a pending HITL action
+    Approve {
+        id: String,
+        #[arg(long)]
+        comment: Option<String>,
+        #[arg(long)]
+        edit: bool,
+    },
+    /// Reject a pending action
+    Reject {
+        id: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Cancel a running task
+    Cancel {
+        id: String,
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Retry a failed/escalated task
+    Retry {
+        id: String,
+        #[arg(long)]
+        priority: Option<String>,
+    },
+}
+
+#[derive(Args)]
+pub struct ListArgs {
+    /// Filter by status (pending|running|completed|failed|escalated|approval)
+    #[arg(long)]
+    pub status: Option<String>,
+    /// Filter by agent name
+    #[arg(long)]
+    pub agent: Option<String>,
+    /// Time filter (e.g. "1h", "24h", "7d")
+    #[arg(long)]
+    pub since: Option<String>,
+    /// Maximum results to return
+    #[arg(long, default_value = "20")]
+    pub limit: usize,
+    /// Include completed tasks (omitted by default)
+    #[arg(long)]
+    pub all: bool,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]

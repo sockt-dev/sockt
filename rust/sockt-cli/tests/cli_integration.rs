@@ -241,10 +241,12 @@ fn tasks_list_subcommand() {
 
 #[test]
 fn tasks_show_subcommand() {
+    // Just verify the command accepts the args (will fail without config/orch running)
     sockt()
         .args(["tasks", "show", "task-123"])
         .assert()
-        .success();
+        .failure()  // Expected to fail without config
+        .stderr(predicate::str::contains("No config").or(predicate::str::contains("No task")));
 }
 
 // ─── Brain Subcommands ───────────────────────────────────────────────────────

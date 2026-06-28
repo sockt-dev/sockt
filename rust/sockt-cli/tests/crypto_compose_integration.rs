@@ -101,8 +101,8 @@ fn all_commands_respond_to_help() {
 
 #[test]
 fn global_flags_work_with_all_commands() {
-    // Exclude config (needs valid config file) and up/down (deprecated aliases that trigger deploy/stop)
-    let commands = ["status", "tasks", "brain", "connect", "export"];
+    // Exclude config (needs valid config file), tasks (needs config), and up/down (deprecated aliases that trigger deploy/stop)
+    let commands = ["status", "brain", "connect", "export"];
 
     for cmd in commands {
         sockt()
@@ -135,11 +135,9 @@ fn success_commands_exit_zero() {
 
 #[test]
 fn help_on_nested_subcommands() {
-    // Exclude config subcommands since they now have real implementations
+    // Exclude config and tasks subcommands since they now have real implementations
     // that require valid config files
     let nested = vec![
-        vec!["tasks", "list"],
-        vec!["tasks", "show", "some-id"],
         vec!["brain", "status"],
     ];
 
