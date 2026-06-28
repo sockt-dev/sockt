@@ -1,3 +1,4 @@
+mod ask;
 mod brain;
 pub(crate) mod checks;
 mod config_cmd;
@@ -44,5 +45,6 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Logs(args) => logs::run(args, cli.config).await,
         Command::Health(args) => health::run(args, cli.config).await,
         Command::Doctor(args) => doctor::run(args, cli.config).await,
+        Command::Ask(args) => ask::run(args, cli.config).await,
     }
 }

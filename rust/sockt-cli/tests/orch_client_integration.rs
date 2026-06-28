@@ -68,6 +68,9 @@ async fn test_create_task_success() {
         parent_id: None,
         llm_calls_budget: None,
         max_attempts: None,
+        owner: None,
+        priority: None,
+        source: None,
     };
     let task = client.create_task(task_create).await.unwrap();
 

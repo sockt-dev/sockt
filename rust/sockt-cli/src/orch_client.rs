@@ -65,6 +65,12 @@ pub struct TaskCreate {
     pub llm_calls_budget: Option<u32>,
     #[serde(rename = "maxAttempts", skip_serializing_if = "Option::is_none")]
     pub max_attempts: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -56,6 +56,8 @@ pub enum Command {
     Health(HealthArgs),
     /// Pre-flight environment check
     Doctor(DoctorArgs),
+    /// Send an instruction to your agent swarm
+    Ask(AskArgs),
 }
 
 #[derive(Args)]
@@ -439,6 +441,49 @@ pub struct DoctorArgs {
     /// Machine-readable JSON output
     #[arg(long)]
     pub json: bool,
+}
+
+#[derive(Args)]
+pub struct AskArgs {
+    /// The instruction to send to the swarm
+    pub message: String,
+
+    /// Direct to a specific agent (default: auto-route)
+    #[arg(long)]
+    pub agent: Option<String>,
+
+    /// Task priority
+    #[arg(long, value_enum, default_value = "normal")]
+    pub priority: Priority,
+
+    /// Block until task completes and show output
+    #[arg(long, short)]
+    pub wait: bool,
+
+    /// Max seconds to wait (only applies with --wait)
+    #[arg(long, default_value = "300")]
+    pub timeout: u64,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Priority {
+    Low,
+    Normal,
+    High,
+}
+
+impl std::fmt::Display for Priority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Low => write!(f, "low"),
+            Self::Normal => write!(f, "normal"),
+            Self::High => write!(f, "high"),
+        }
+    }
 }
 
 #[derive(Args)]
