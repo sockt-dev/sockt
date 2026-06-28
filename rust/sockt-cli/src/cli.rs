@@ -404,9 +404,33 @@ pub struct UpgradeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
-    /// Output file path
+    /// Output file path (default: ./sockt-export-YYYY-MM-DD.tar.gz)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Archive format: tar.gz or zip
+    #[arg(long, default_value = "tar.gz")]
+    pub format: String,
+
+    /// Include config.yaml in export
+    #[arg(long)]
+    pub include_config: bool,
+
+    /// Include gbrain/logs/ directory
+    #[arg(long)]
+    pub include_logs: bool,
+
+    /// Include everything (config + logs)
+    #[arg(long)]
+    pub include_all: bool,
+
+    /// Exclude files matching glob pattern
+    #[arg(long)]
+    pub exclude: Vec<String>,
+
+    /// Output manifest as JSON (dry-run)
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize)]
