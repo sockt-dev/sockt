@@ -7,7 +7,7 @@
 //! - Optional scratch data purging with interactive confirmation
 
 use std::path::PathBuf;
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::cli::StopArgs;
 use crate::runtime::{

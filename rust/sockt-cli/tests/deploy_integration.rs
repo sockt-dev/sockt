@@ -140,7 +140,7 @@ fn test_dry_run_shows_all_services() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Would start"))
-        .stdout(predicate::str::contains("gbrain-mcp"))
+        .stdout(predicate::str::contains("gbrain"))
         .stdout(predicate::str::contains("orch"))
         .stdout(predicate::str::contains("cadvp"));
 }

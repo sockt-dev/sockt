@@ -1,0 +1,8 @@
+{
+  "name": "@sockt/gbrain-mcp",
+  "version": "0.0.1",
+  "type": "module",
+  "dependencies": {
+    "@sockt/types": "workspace:*"
+  }
+}

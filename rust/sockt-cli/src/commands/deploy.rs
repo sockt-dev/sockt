@@ -6,12 +6,12 @@ use anyhow::{bail, Context, Result};
 use crate::cli::DeployArgs;
 use crate::config::loader::ConfigLoader;
 use crate::config::SocktConfig;
+use crate::crypto::{self, KeyManager};
 use crate::runtime::{
     check_health, is_process_alive, load_runtime_state, save_runtime_state, spawn_bun_service,
     RuntimeState, ServicePid,
 };
 
-/// Configuration for a single service to deploy
 struct ServiceConfig {
     name: String,
     package_path: String,
@@ -22,26 +22,22 @@ struct ServiceConfig {
 
 /// Main entry point for deploy command
 pub async fn run(args: DeployArgs, config_path: Option<PathBuf>) -> Result<()> {
-    // Load config
     let loader = ConfigLoader::from_default_or_override(config_path);
     let config = loader
         .load()
         .context("No Sockt deployment found. Run `sockt init` first.")?;
 
-    // Handle dry-run mode early
     if args.dry_run {
         return run_dry_run(&config, args.department.as_deref());
     }
 
-    // Preflight checks
     check_prerequisites(&config)?;
+    ensure_scratch_dir()?;
 
-    // Build service configurations
     let services = build_service_configs(&config, args.department.as_deref())?;
 
     println!("  Starting swarm...\n");
 
-    // Spawn services in phases
     let mut all_pids = Vec::new();
 
     // Phase 1: GBrain MCP (infrastructure)
@@ -52,23 +48,20 @@ pub async fn run(args: DeployArgs, config_path: Option<PathBuf>) -> Result<()> {
     let orch = spawn_with_health(&services[1], args.timeout).await?;
     all_pids.push(orch);
 
-    // Phase 3: CADVP + Agents (parallel, no health checks)
+    // Phase 3: CADVP + Agents (no health checks)
     for service in &services[2..] {
-        let pid = spawn_single_service(service).await?;
+        let pid = spawn_single_service(service)?;
         all_pids.push(pid);
     }
 
-    // Save runtime state
     let state = RuntimeState {
         pids: all_pids.clone(),
     };
     save_runtime_state(&state).context("Failed to save runtime state")?;
 
-    // Print success
     println!("\n  ✓ Swarm deployed ({} processes)\n", all_pids.len());
     print_next_commands();
 
-    // Handle watch mode
     if args.watch {
         println!("\n  ✓ All services healthy. Streaming logs (Ctrl+C to detach):\n");
         stream_logs_until_interrupt(&all_pids).await?;
@@ -146,6 +139,16 @@ fn find_monorepo_root() -> Result<PathBuf> {
     }
 }
 
+fn ensure_scratch_dir() -> Result<()> {
+    let scratch = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".sockt")
+        .join("scratch");
+    std::fs::create_dir_all(&scratch)
+        .context("Failed to create ~/.sockt/scratch directory")?;
+    Ok(())
+}
+
 // ============================================================================
 // Service Configuration
 // ============================================================================
@@ -157,29 +160,41 @@ fn build_service_configs(
     let monorepo = find_monorepo_root()?;
     let mut services = Vec::new();
 
-    // 1. GBrain MCP (always first)
     services.push(create_gbrain_config(&monorepo, config));
-
-    // 2. Orchestrator (always second)
-    services.push(create_orch_config(&monorepo, config));
-
-    // 3. CADVP (always)
+    services.push(create_orch_config(&monorepo, config)?);
     services.push(create_cadvp_config(&monorepo, config));
-
-    // 4. Agents (filtered by department)
     services.extend(create_agent_configs(&monorepo, config, department)?);
 
     Ok(services)
 }
 
-fn create_gbrain_config(monorepo: &PathBuf, _config: &SocktConfig) -> ServiceConfig {
+fn decrypt_api_key(config: &SocktConfig) -> Option<String> {
+    let km = KeyManager::new(KeyManager::default_path());
+    if let Ok(identity) = km.load() {
+        crypto::decrypt(&config.models.api_key, &identity).ok()
+    } else {
+        None
+    }
+}
+
+fn create_gbrain_config(monorepo: &PathBuf, config: &SocktConfig) -> ServiceConfig {
+    let gbrain_dir = if config.gbrain.directory.is_relative() {
+        monorepo.join(&config.gbrain.directory)
+    } else {
+        config.gbrain.directory.clone()
+    };
+
     let mut env_vars = HashMap::new();
     env_vars.insert("PORT".to_string(), "3200".to_string());
+    env_vars.insert(
+        "GBRAIN_DIR".to_string(),
+        gbrain_dir.to_string_lossy().to_string(),
+    );
 
     ServiceConfig {
         name: "gbrain-mcp".to_string(),
         package_path: monorepo
-            .join("packages/gbrain-mcp/src/index.ts")
+            .join("packages/gbrain-mcp/src/serve.ts")
             .to_string_lossy()
             .to_string(),
         port: Some(3200),
@@ -188,7 +203,12 @@ fn create_gbrain_config(monorepo: &PathBuf, _config: &SocktConfig) -> ServiceCon
     }
 }
 
-fn create_orch_config(monorepo: &PathBuf, config: &SocktConfig) -> ServiceConfig {
+fn create_orch_config(monorepo: &PathBuf, config: &SocktConfig) -> Result<ServiceConfig> {
+    let scratch = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".sockt")
+        .join("scratch");
+
     let mut env_vars = HashMap::new();
     env_vars.insert("PORT".to_string(), "3100".to_string());
     env_vars.insert(
@@ -196,34 +216,59 @@ fn create_orch_config(monorepo: &PathBuf, config: &SocktConfig) -> ServiceConfig
         "http://localhost:3200".to_string(),
     );
     env_vars.insert("DEPLOYMENT_ID".to_string(), config.deployment_id.clone());
+    env_vars.insert(
+        "DB_PATH".to_string(),
+        scratch.join("orch.sqlite").to_string_lossy().to_string(),
+    );
+    env_vars.insert("MODEL_PROVIDER".to_string(), config.models.provider.to_string());
+    env_vars.insert("FRONTIER_MODEL".to_string(), config.models.frontier.clone());
+    env_vars.insert("FAST_MODEL".to_string(), config.models.fast.clone());
+    if let Some(api_key) = decrypt_api_key(config) {
+        env_vars.insert("MODEL_API_KEY".to_string(), api_key);
+    }
+    if let Some(ref base_url) = config.models.base_url {
+        env_vars.insert("MODEL_BASE_URL".to_string(), base_url.clone());
+    }
 
-    ServiceConfig {
+    Ok(ServiceConfig {
         name: "orch".to_string(),
         package_path: monorepo
-            .join("packages/orch/src/index.ts")
+            .join("packages/orch/src/serve.ts")
             .to_string_lossy()
             .to_string(),
         port: Some(3100),
         health_endpoint: Some("http://localhost:3100/health".to_string()),
         env_vars,
-    }
+    })
 }
 
 fn create_cadvp_config(monorepo: &PathBuf, _config: &SocktConfig) -> ServiceConfig {
+    let scratch = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".sockt")
+        .join("scratch");
+
     let mut env_vars = HashMap::new();
-    env_vars.insert(
-        "ORCH_URL".to_string(),
-        "http://localhost:3100".to_string(),
-    );
     env_vars.insert(
         "GBRAIN_URL".to_string(),
         "http://localhost:3200".to_string(),
+    );
+    env_vars.insert(
+        "WATCH_DIR".to_string(),
+        scratch.to_string_lossy().to_string(),
+    );
+    env_vars.insert(
+        "CHECKPOINT_PATH".to_string(),
+        scratch
+            .join("cadvp-checkpoint.json")
+            .to_string_lossy()
+            .to_string(),
     );
 
     ServiceConfig {
         name: "cadvp".to_string(),
         package_path: monorepo
-            .join("packages/cadvp/src/index.ts")
+            .join("packages/cadvp/src/serve.ts")
             .to_string_lossy()
             .to_string(),
         port: None,
@@ -234,10 +279,9 @@ fn create_cadvp_config(monorepo: &PathBuf, _config: &SocktConfig) -> ServiceConf
 
 fn create_agent_configs(
     monorepo: &PathBuf,
-    _config: &SocktConfig,
+    config: &SocktConfig,
     department: Option<&str>,
 ) -> Result<Vec<ServiceConfig>> {
-    // Default agent definitions
     let agents = vec![
         ("agent-1", "Lead Researcher", "research"),
         ("agent-2", "Outbound Writer", "marketing"),
@@ -260,13 +304,27 @@ fn create_agent_configs(
             "ORCH_URL".to_string(),
             "http://localhost:3100".to_string(),
         );
+        env_vars.insert("DEPLOYMENT_ID".to_string(), config.deployment_id.clone());
         env_vars.insert("AGENT_ROLE".to_string(), role.to_string());
         env_vars.insert("DEPARTMENT".to_string(), dept.to_string());
+        env_vars.insert("MODEL_PROVIDER".to_string(), config.models.provider.to_string());
+        env_vars.insert("FRONTIER_MODEL".to_string(), config.models.frontier.clone());
+        if let Some(api_key) = decrypt_api_key(config) {
+            env_vars.insert("MODEL_API_KEY".to_string(), api_key);
+        }
+        if let Some(ref base_url) = config.models.base_url {
+            env_vars.insert("MODEL_BASE_URL".to_string(), base_url.clone());
+        }
+        let scratch = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".sockt")
+            .join("scratch");
+        env_vars.insert("SCRATCH_DIR".to_string(), scratch.to_string_lossy().to_string());
 
         configs.push(ServiceConfig {
             name: name.to_string(),
             package_path: monorepo
-                .join("packages/runtime/src/index.ts")
+                .join("packages/runtime/src/serve.ts")
                 .to_string_lossy()
                 .to_string(),
             port: None,
@@ -285,17 +343,14 @@ fn create_agent_configs(
 async fn spawn_with_health(config: &ServiceConfig, timeout: u64) -> Result<ServicePid> {
     use std::time::Instant;
 
-    // Print starting status
     print!("    {:<15} starting → ", config.name);
     std::io::Write::flush(&mut std::io::stdout())?;
 
     let start = Instant::now();
 
-    // Spawn the service
     let pid = spawn_bun_service(&config.package_path, config.env_vars.clone(), &config.name)
         .context(format!("Failed to spawn {}", config.name))?;
 
-    // Wait for health check if endpoint provided
     if let Some(health_url) = &config.health_endpoint {
         poll_health_with_progress(health_url, timeout)
             .await
@@ -326,7 +381,7 @@ async fn poll_health_with_progress(url: &str, timeout_secs: u64) -> Result<()> {
     }
 }
 
-async fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
+fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
     println!("    {:<15} starting... [daemon]", config.name);
 
     spawn_bun_service(&config.package_path, config.env_vars.clone(), &config.name)
@@ -338,7 +393,6 @@ async fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
 // ============================================================================
 
 fn run_dry_run(config: &SocktConfig, department: Option<&str>) -> Result<()> {
-    // Build configs but don't spawn
     let services = build_service_configs(config, department)?;
 
     println!("\n  Would start:\n");
@@ -356,7 +410,7 @@ fn run_dry_run(config: &SocktConfig, department: Option<&str>) -> Result<()> {
         );
     }
 
-    let est_memory_mb = services.len() * 200; // ~200 MB per service
+    let est_memory_mb = services.len() * 200;
     println!(
         "\n  {} processes, estimated memory: ~{} MB",
         services.len(),
@@ -380,7 +434,6 @@ fn print_next_commands() {
 }
 
 async fn stream_logs_until_interrupt(_pids: &[ServicePid]) -> Result<()> {
-    // Wait for Ctrl+C
     tokio::signal::ctrl_c().await?;
     Ok(())
 }

@@ -1,8 +1,8 @@
 //! Runtime process management for sockt services.
 //!
-//! This module provides functions to spawn, track, and manage Bun service processes
-//! without Docker. It handles process lifecycle (spawn, kill), health checks, and
-//! persists runtime state to `~/.sockt/runtime.json`.
+//! This module provides functions to spawn, track, and manage Bun service processes.
+//! It handles process lifecycle (spawn, kill), health checks, and persists runtime
+//! state to `~/.sockt/runtime.json`.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -101,8 +101,6 @@ pub fn spawn_bun_service(
         use std::os::unix::process::CommandExt;
         unsafe {
             cmd.pre_exec(|| {
-                // Create new session, making this process a session leader
-                // This detaches the process from the terminal
                 nix::unistd::setsid()
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
                 Ok(())
@@ -115,7 +113,6 @@ pub fn spawn_bun_service(
 
     let pid = child.id();
 
-    // Extract port from env vars if provided
     let port = env_vars.get("PORT")
         .and_then(|p| p.parse::<u16>().ok());
 
@@ -132,8 +129,6 @@ pub fn is_process_alive(pid: u32) -> bool {
     use nix::unistd::Pid;
 
     let pid = Pid::from_raw(pid as i32);
-    // Signal 0 doesn't actually send a signal, just checks if process exists
-    // Use None to send signal 0 (null signal for existence check)
     signal::kill(pid, None).is_ok()
 }
 
