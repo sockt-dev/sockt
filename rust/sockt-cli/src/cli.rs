@@ -388,6 +388,18 @@ pub struct UpgradeArgs {
     /// Check for updates without installing
     #[arg(long)]
     pub check: bool,
+
+    /// Release channel: stable|beta
+    #[arg(long, default_value = "stable")]
+    pub channel: String,
+
+    /// Skip version check, reinstall current version
+    #[arg(long)]
+    pub force: bool,
+
+    /// Skip confirmation prompt
+    #[arg(short, long)]
+    pub yes: bool,
 }
 
 #[derive(Args)]
