@@ -1,15 +1,29 @@
 # Sockt
 
-AI agent swarms that won't bankrupt you or embarrass you.
+Agent swarms. Budget-enforced. Memory-persistent. No runaway loops.
 
-Sockt is an open-core platform for deploying coordinated AI agent teams ("Swarms") into your workspace. Unlike single-agent tools, Swarms divide complex workflows into specialized roles that share memory, prevent runaway cost loops, and improve automatically over time.
+```bash
+bun install && bun test
+```
 
-## Why Sockt?
+## The Problem
 
-Most multi-agent systems fail in production due to runaway loops (agents ping-pong indefinitely, burning thousands in API costs), memory loss (background tasks forget everything they learned), and credential leakage (API keys exposed in agent context windows).
+Multi-agent systems fail in production: runaway loops burn API budgets, agents forget everything between runs, and credentials leak through prompt injection.
 
-Sockt solves these with hierarchical task coordination that prevents loops, persistent Git-backed memory that's human-readable and version-controlled, and hardware-isolated credential vaults that keep secrets safe from prompt injection attacks.
+## The Fix
 
-## Built With
+- **FSM per task** — enforced state machine with per-task LLM call cap. Budget exceeded → auto-escalate, never loop.
+- **Async memory** — execution logs to JSONL, CADVP daemon deduplicates and persists. Agents remember across runs.
+- **Isolated vaults** — credentials stay out of context windows.
 
-Rust + TypeScript (Bun runtime). Open-core license converts to MIT after 2 years.
+## Stack
+
+Bun · TypeScript · SQLite · Hono · Zod · Vercel AI SDK (Anthropic, OpenAI, Google, Ollama)
+
+## Packages
+
+`types` `fsm` `memory` `orch` `runtime` `cadvp`
+
+## License
+
+FSL-1.1-MIT — non-competing use now, full MIT after 2 years.
