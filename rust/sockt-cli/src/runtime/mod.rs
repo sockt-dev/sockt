@@ -38,6 +38,8 @@ pub struct ServicePid {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RuntimeState {
     pub pids: Vec<ServicePid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<u64>, // Unix timestamp in seconds
 }
 
 /// Get the path to the runtime state file (~/.sockt/runtime.json)

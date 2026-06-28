@@ -5,6 +5,7 @@ mod config_cmd;
 mod department;
 mod connect;
 pub(crate) mod deploy;
+mod destroy;
 mod doctor;
 mod down;
 mod export;
@@ -34,6 +35,7 @@ pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Down(args) => down::run(args, cli.config).await,
         Command::Stop(args) => stop::run(args, cli.config).await,
+        Command::Destroy(args) => destroy::run(args, cli.config).await,
         Command::Restart(args) => restart::run(args, cli.config).await,
         Command::Status(args) => status::run(args, cli.config).await,
         Command::Tasks(args) => tasks::run(args, cli.config).await,

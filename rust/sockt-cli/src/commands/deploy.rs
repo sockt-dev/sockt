@@ -56,6 +56,10 @@ pub async fn run(args: DeployArgs, config_path: Option<PathBuf>) -> Result<()> {
 
     let state = RuntimeState {
         pids: all_pids.clone(),
+        started_at: Some(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()),
     };
     save_runtime_state(&state).context("Failed to save runtime state")?;
 

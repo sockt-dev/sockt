@@ -118,7 +118,10 @@ pub async fn run(args: RestartArgs, config_path: Option<PathBuf>) -> Result<()> 
         }
     }
 
-    save_runtime_state(&RuntimeState { pids: new_pids })?;
+    save_runtime_state(&RuntimeState {
+        pids: new_pids,
+        started_at: state.started_at, // Preserve original start time
+    })?;
 
     println!("\n  ✓ Restart complete.");
     Ok(())

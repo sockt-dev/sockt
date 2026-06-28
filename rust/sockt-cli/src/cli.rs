@@ -32,6 +32,8 @@ pub enum Command {
     Down(DownArgs),
     /// Stop the swarm (graceful shutdown)
     Stop(StopArgs),
+    /// Destroy the swarm and remove all local data
+    Destroy(DestroyArgs),
     /// Restart one or all services (stop + re-deploy)
     Restart(RestartArgs),
     /// Show deployment status
@@ -146,6 +148,21 @@ pub struct StopArgs {
     /// Max seconds to wait for graceful shutdown
     #[arg(long, default_value = "30")]
     pub timeout: u64,
+}
+
+#[derive(Args)]
+pub struct DestroyArgs {
+    /// Skip confirmation prompt
+    #[arg(long)]
+    pub confirm: bool,
+
+    /// Keep config.yaml file
+    #[arg(long)]
+    pub keep_config: bool,
+
+    /// Keep gbrain/ directory
+    #[arg(long)]
+    pub keep_gbrain: bool,
 }
 
 #[derive(Args)]
