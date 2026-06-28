@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { initializeSchema } from "@sockt/fsm";
 import { Orchestrator } from "./orchestrator.ts";
 
 const port = Number(process.env.PORT ?? 3100);
@@ -9,6 +10,7 @@ const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
 await Bun.write(Bun.file(dir + "/.keep"), "");
 
 const db = new Database(dbPath, { create: true });
+initializeSchema(db);
 
 const orch = new Orchestrator({
   port,
