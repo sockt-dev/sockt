@@ -66,6 +66,8 @@ thiserror = "2"
 anyhow = "1"
 secrecy = "0.10"
 url = "2"
+tar = "0.4"
+flate2 = "1.0"
 
 # Process management & signals (Unix-only)
 nix = { version = "0.29", features = ["signal", "process", "fs"] }
