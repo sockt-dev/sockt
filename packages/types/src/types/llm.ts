@@ -3,6 +3,8 @@ export const LlmProvider = {
   OpenAI: "openai",
   Google: "google",
   Ollama: "ollama",
+  Bedrock: "bedrock",
+  OpenRouter: "openrouter",
 } as const;
 export type LlmProvider = (typeof LlmProvider)[keyof typeof LlmProvider];
 export const LLM_PROVIDER_VALUES = Object.values(LlmProvider) as [LlmProvider, ...LlmProvider[]];
@@ -32,25 +34,67 @@ export interface LlmConfig {
   baseUrl?: string;
   maxTokens?: number;
   temperature?: number;
+  region?: string;
+  features?: {
+    thinking?: {
+      enabled: boolean;
+      budgetTokens?: number;
+      display?: "summarized" | "omitted";
+    };
+    promptCaching?: {
+      enabled: boolean;
+      ttl?: "5m" | "1h";
+    };
+    structuredOutput?: {
+      enabled: boolean;
+      schema?: Record<string, unknown>;
+      strict?: boolean;
+    };
+    reasoning?: {
+      effort?: "none" | "low" | "medium" | "high" | "xhigh";
+      summary?: "auto" | "concise" | "detailed";
+    };
+    guardrailConfig?: {
+      guardrailIdentifier: string;
+      guardrailVersion: string;
+    };
+  };
+}
+
+export interface MessageContent {
+  type: "text" | "image" | "audio" | "document" | "video";
+  text?: string;
+  imageUrl?: string;
+  imageBase64?: string;
+  audioUrl?: string;
+  audioBase64?: string;
+  documentUrl?: string;
+  documentBase64?: string;
+  mimeType?: string;
 }
 
 export interface LlmMessage {
   role: MessageRole;
-  content: string;
+  content: string | MessageContent[];
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  name?: string;
 }
 
 export interface LlmStreamChunk {
   delta: string;
   usage?: TokenUsage;
   finishReason?: "stop" | "tool_calls" | "length" | "content_filter";
+  thinking?: string;
 }
 
 export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cacheReadInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  reasoningTokens?: number;
 }
 
 export interface ToolDefinition {

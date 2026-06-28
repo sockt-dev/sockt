@@ -5,5 +5,8 @@ export function estimateTokens(text: string): number {
 }
 
 export function estimateMessagesTokens(messages: LlmMessage[]): number {
-  return messages.reduce((sum, m) => sum + estimateTokens(m.content) + 4, 0);
+  return messages.reduce((sum, m) => {
+    const contentStr = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    return sum + estimateTokens(contentStr) + 4;
+  }, 0);
 }

@@ -1,0 +1,80 @@
+---
+source: sockt-cli/src/compose/mod.rs
+expression: yaml
+---
+services:
+  sockt-orch:
+    image: ghcr.io/sockt/orch:latest
+    container_name: sockt-orch-test-dep
+    ports:
+    - 3100:3100
+    environment:
+      TENANT_ID: test-deploy
+      GBRAIN_MCP_URL: http://gbrain:3200
+      MODEL_PROVIDER: anthropic
+      FRONTIER_MODEL: claude-sonnet-4-20250514
+      FAST_MODEL: claude-haiku-4-20250514
+    depends_on:
+      gbrain:
+        condition: service_healthy
+    healthcheck:
+      test: curl -f http://localhost:3100/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+    - sockt-net
+    volumes:
+    - scratch-data:/workspace/scratch
+    restart: unless-stopped
+  gbrain:
+    image: ghcr.io/sockt/gbrain:latest
+    container_name: sockt-gbrain-test-dep
+    ports:
+    - 3200:3200
+    environment:
+      GBRAIN_DIR: /gbrain
+    volumes:
+    - ./gbrain:/gbrain
+    healthcheck:
+      test: curl -f http://localhost:3200/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+    - sockt-net
+    restart: unless-stopped
+  sockt-agent:
+    image: ghcr.io/sockt/runtime:latest
+    container_name: sockt-agent-test-dep
+    environment:
+      ORCH_URL: http://sockt-orch:3100
+      TENANT_ID: test-deploy
+      SCRATCH_DIR: /workspace/scratch
+    depends_on:
+      sockt-orch:
+        condition: service_healthy
+    volumes:
+    - scratch-data:/workspace/scratch
+    networks:
+    - sockt-net
+    restart: unless-stopped
+  sockt-cadvp:
+    image: ghcr.io/sockt/cadvp:latest
+    container_name: sockt-cadvp-test-dep
+    environment:
+      GBRAIN_MCP_URL: http://gbrain:3200
+      WATCH_DIR: /watch
+    depends_on:
+      gbrain:
+        condition: service_healthy
+    volumes:
+    - scratch-data:/watch
+    networks:
+    - sockt-net
+    restart: unless-stopped
+volumes:
+  scratch-data: {}
+networks:
+  sockt-net:
+    driver: bridge

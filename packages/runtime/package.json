@@ -2,15 +2,17 @@
   "name": "@sockt/runtime",
   "version": "0.0.1",
   "type": "module",
-  "module": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./src/index.ts",
-      "types": "./src/index.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
   },
+  "files": ["dist"],
   "scripts": {
+    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* --external ai --external @ai-sdk/* && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
@@ -18,6 +20,7 @@
     "@sockt/types": "workspace:*",
     "ai": "^4.0",
     "@ai-sdk/anthropic": "^1.0",
-    "@ai-sdk/openai": "^1.0"
+    "@ai-sdk/openai": "^1.0",
+    "@ai-sdk/amazon-bedrock": "^1.0"
   }
 }

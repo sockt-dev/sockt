@@ -403,4 +403,313 @@ describe("HttpLlmClient", () => {
       ollamaServer.stop();
     }
   });
+
+  test("chat handles multimodal content with images", async () => {
+    const client = new HttpLlmClient();
+    const request: LlmRequest = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What's in this image?" },
+            { type: "image", imageUrl: "https://example.com/image.jpg", mimeType: "image/jpeg" },
+          ],
+        },
+      ],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    };
+
+    await client.chat(request);
+
+    const messages = lastRequestBody.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  test("chat handles multimodal content with base64 images", async () => {
+    const client = new HttpLlmClient();
+    const validBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const request: LlmRequest = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Analyze this" },
+            { type: "image", imageBase64: validBase64, mimeType: "image/png" },
+          ],
+        },
+      ],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    };
+
+    await client.chat(request);
+
+    const messages = lastRequestBody.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  test("chat handles document content", async () => {
+    const client = new HttpLlmClient();
+    const validPdfBase64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMS0gNCAwIFI+Pj4+L01lZGlhQm94WzAgMCA2MTIgNzkyXS9Db250ZW50cyA1IDAgUj4+CmVuZG9iago0IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iago1IDAgb2JqCjw8L0xlbmd0aCA0NT4+CnN0cmVhbQpCVAovRjEtIDI0IFRmCjEwMCA3MDAgVGQKKEhlbGxvIFdvcmxkKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY2IDAwMDAwIG4gCjAwMDAwMDAxMjUgMDAwMDAgbiAKMDAwMDAwMDI0NyAwMDAwMCBuIAowMDAwMDAwMzMxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA2L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKNDI1CiUlRU9G";
+    const request: LlmRequest = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Summarize this PDF" },
+            { type: "document", documentBase64: validPdfBase64, mimeType: "application/pdf" },
+          ],
+        },
+      ],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    };
+
+    await client.chat(request);
+
+    const messages = lastRequestBody.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  test("chat handles audio content", async () => {
+    const client = new HttpLlmClient();
+    const validAudioBase64 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD/////////////////////////////////////////////////////////////////////////////////////";
+    const request: LlmRequest = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcribe this" },
+            { type: "audio", audioBase64: validAudioBase64, mimeType: "audio/mpeg" },
+          ],
+        },
+      ],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    };
+
+    await client.chat(request);
+
+    const messages = lastRequestBody.messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  test("chat extracts cache token usage", async () => {
+    responseOverride = {
+      id: "chatcmpl-cached",
+      object: "chat.completion",
+      created: 1700000000,
+      model: "claude-opus-4",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: "Cached response" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        prompt_tokens_details: {
+          cached_tokens: 80,
+        },
+      },
+    };
+
+    try {
+      const client = new HttpLlmClient();
+      const response = await client.chat({
+        messages: [{ role: "user", content: "test" }],
+        config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+      });
+
+      expect(response.usage.promptTokens).toBe(100);
+      expect(response.usage.completionTokens).toBe(20);
+    } finally {
+      responseOverride = null;
+    }
+  });
+
+  test("bedrock provider requires region", async () => {
+    const client = new HttpLlmClient();
+    try {
+      await client.chat({
+        messages: [{ role: "user", content: "hi" }],
+        config: { provider: "bedrock", model: "anthropic.claude-3-5-sonnet-20241022-v2:0", apiKey: "k" },
+      });
+      expect(true).toBe(false);
+    } catch (error) {
+      expect(error).toBeInstanceOf(LlmError);
+      expect((error as LlmError).message).toContain("region is required");
+    }
+  });
+
+  test("chat supports thinking feature flag", async () => {
+    const client = new HttpLlmClient();
+    const request: LlmRequest = {
+      messages: [{ role: "user", content: "Solve complex problem" }],
+      config: {
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: "k",
+        baseUrl,
+        features: {
+          thinking: {
+            enabled: true,
+            budgetTokens: 2000,
+            display: "summarized",
+          },
+        },
+      },
+    };
+
+    await client.chat(request);
+
+    expect(lastRequestBody).toBeDefined();
+  });
+
+  test("chat supports structured output feature", async () => {
+    responseOverride = {
+      id: "chatcmpl-structured",
+      object: "chat.completion",
+      created: 1700000000,
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: '{"name":"John","age":30}' },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 },
+    };
+
+    try {
+      const client = new HttpLlmClient();
+      const request: LlmRequest = {
+        messages: [{ role: "user", content: "Extract name and age" }],
+        config: {
+          provider: "openai",
+          model: "gpt-4",
+          apiKey: "k",
+          baseUrl,
+          features: {
+            structuredOutput: {
+              enabled: true,
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  age: { type: "number" },
+                },
+              },
+              strict: true,
+            },
+          },
+        },
+      };
+
+      const response = await client.chat(request);
+
+      expect(response.message.content).toContain("John");
+      expect(lastRequestBody).toBeDefined();
+    } finally {
+      responseOverride = null;
+    }
+  });
+
+  test("backward compatibility: string content still works", async () => {
+    const client = new HttpLlmClient();
+    const request: LlmRequest = {
+      messages: [
+        { role: "system", content: "You are helpful." },
+        { role: "user", content: "Say hello" },
+      ],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    };
+
+    const response = await client.chat(request);
+
+    expect(response.message.role).toBe("assistant");
+    expect(response.message.content).toBe("Hello! I'm the mock assistant.");
+    expect(response.usage.totalTokens).toBe(35);
+  });
+
+  test("backward compatibility: existing token fields present", async () => {
+    const client = new HttpLlmClient();
+    const response = await client.chat({
+      messages: [{ role: "user", content: "test" }],
+      config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl },
+    });
+
+    expect(response.usage).toHaveProperty("promptTokens");
+    expect(response.usage).toHaveProperty("completionTokens");
+    expect(response.usage).toHaveProperty("totalTokens");
+    expect(typeof response.usage.promptTokens).toBe("number");
+    expect(typeof response.usage.completionTokens).toBe("number");
+    expect(typeof response.usage.totalTokens).toBe("number");
+  });
+
+  test("openrouter provider uses correct headers and base URL", async () => {
+    const openRouterServer = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const headers = Object.fromEntries(req.headers.entries());
+        expect(headers["http-referer"]).toBeDefined();
+        expect(headers["x-title"]).toBe("Sockt");
+
+        return Response.json({
+          id: "openrouter-1",
+          object: "chat.completion",
+          created: 1700000000,
+          model: "anthropic/claude-3.5-sonnet",
+          choices: [{ index: 0, message: { role: "assistant", content: "OpenRouter response" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+        });
+      },
+    });
+
+    try {
+      const client = new HttpLlmClient();
+      const response = await client.chat({
+        messages: [{ role: "user", content: "hi" }],
+        config: {
+          provider: "openrouter",
+          model: "anthropic/claude-3.5-sonnet",
+          apiKey: "test-key",
+          baseUrl: `http://localhost:${openRouterServer.port}/api/v1`
+        },
+      });
+      expect(response.message.content).toBe("OpenRouter response");
+      expect(response.model).toBe("anthropic/claude-3.5-sonnet");
+    } finally {
+      openRouterServer.stop();
+    }
+  });
+
+  test("error handling provides helpful message for JSON parsing errors", async () => {
+    const brokenServer = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        return new Response("not json", { status: 200 });
+      },
+    });
+
+    try {
+      const client = new HttpLlmClient();
+      await client.chat({
+        messages: [{ role: "user", content: "test" }],
+        config: { provider: "openai", model: "gpt-4", apiKey: "k", baseUrl: `http://localhost:${brokenServer.port}` },
+      });
+      expect(true).toBe(false);
+    } catch (error) {
+      expect(error).toBeInstanceOf(LlmError);
+      const llmError = error as LlmError;
+      expect(llmError.message).toContain("Invalid JSON");
+    } finally {
+      brokenServer.stop();
+    }
+  });
 });

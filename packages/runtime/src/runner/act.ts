@@ -41,5 +41,6 @@ export async function actPhase(
   });
   ctx.messages.push(response.message);
 
-  return { llmOutput: response.message.content };
+  const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);
+  return { llmOutput: contentStr };
 }
