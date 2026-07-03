@@ -2,15 +2,17 @@
   "name": "@sockt/fsm",
   "version": "0.0.1",
   "type": "module",
-  "module": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./src/index.ts",
-      "types": "./src/index.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
   },
+  "files": ["dist"],
   "scripts": {
+    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* --external uuid --external bun:sqlite && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

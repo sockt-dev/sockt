@@ -26,7 +26,8 @@ export async function planPhase(
   ctx.messages.push({ role: "user", content: PLAN_INSTRUCTION });
   ctx.messages.push(response.message);
 
-  const plan = parsePlanResponse(response.message.content, maxSteps);
+  const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);
+  const plan = parsePlanResponse(contentStr, maxSteps);
 
   return plan;
 }
