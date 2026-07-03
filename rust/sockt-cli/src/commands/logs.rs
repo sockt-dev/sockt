@@ -108,14 +108,10 @@ async fn follow_logs(
         }
     }
 
-    // Setup Ctrl+C handler
-    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-
     // Stream new entries
     loop {
         tokio::select! {
-            _ = sigint.recv() => {
-                // Graceful shutdown on Ctrl+C
+            _ = tokio::signal::ctrl_c() => {
                 break;
             }
             _ = sleep(Duration::from_millis(500)) => {

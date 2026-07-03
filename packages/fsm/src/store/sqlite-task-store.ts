@@ -57,6 +57,8 @@ export class SqliteTaskStore implements TaskStore {
   private readonly countByStatusStmt: Statement;
   private readonly incrementLlmStmt: Statement;
   private readonly claimStmt: Statement;
+  private readonly listAllByTenantStmt: Statement;
+  private readonly listByStatusAndTenantStmt: Statement;
 
   constructor(db: Database) {
     this.db = db;
@@ -96,6 +98,14 @@ export class SqliteTaskStore implements TaskStore {
       WHERE id = ?1 AND status = 'pending' AND owner IS NULL
       RETURNING *
     `);
+
+    this.listAllByTenantStmt = db.prepare(
+      "SELECT * FROM tasks WHERE tenant_id = ?1 ORDER BY updated_at DESC"
+    );
+
+    this.listByStatusAndTenantStmt = db.prepare(
+      "SELECT * FROM tasks WHERE tenant_id = ?1 AND status = ?2 ORDER BY updated_at DESC"
+    );
   }
 
   async create(task: TaskCreate): Promise<Task> {
@@ -213,6 +223,15 @@ export class SqliteTaskStore implements TaskStore {
       throw new TaskStoreError("Task not found", { id });
     }
     this.deleteStmt.run(id);
+  }
+
+  async listAll(tenantId: string, status?: TaskStatus): Promise<Task[]> {
+    if (status) {
+      const rows = this.listByStatusAndTenantStmt.all(tenantId, status) as TaskRow[];
+      return rows.map(mapRow);
+    }
+    const rows = this.listAllByTenantStmt.all(tenantId) as TaskRow[];
+    return rows.map(mapRow);
   }
 
   async listByOwner(owner: string): Promise<Task[]> {

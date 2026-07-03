@@ -82,6 +82,7 @@ export class Orchestrator {
       fsm: this.fsm,
       claimLock: this.claimLock,
       lockManager: this.lockManager,
+      registry: this.registry,
       telemetry: config.telemetry,
     });
 

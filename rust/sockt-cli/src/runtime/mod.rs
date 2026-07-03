@@ -127,24 +127,45 @@ pub fn spawn_bun_service(
 
 /// Check if a process with the given PID is alive
 pub fn is_process_alive(pid: u32) -> bool {
-    use nix::sys::signal;
-    use nix::unistd::Pid;
-
-    let pid = Pid::from_raw(pid as i32);
-    signal::kill(pid, None).is_ok()
+    #[cfg(unix)]
+    {
+        use nix::sys::signal;
+        use nix::unistd::Pid;
+        let nix_pid = Pid::from_raw(pid as i32);
+        signal::kill(nix_pid, None).is_ok()
+    }
+    #[cfg(windows)]
+    {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output();
+        match output {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()),
+            Err(_) => false,
+        }
+    }
 }
 
 /// Kill a process by PID
 pub fn kill_process(pid: u32, force: bool) -> Result<()> {
-    use nix::sys::signal::{self, Signal};
-    use nix::unistd::Pid;
-
-    let pid = Pid::from_raw(pid as i32);
-    let signal = if force { Signal::SIGKILL } else { Signal::SIGTERM };
-
-    signal::kill(pid, signal)
-        .map_err(|e| RuntimeError::Signal(e.to_string()))?;
-
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{self, Signal};
+        use nix::unistd::Pid;
+        let nix_pid = Pid::from_raw(pid as i32);
+        let sig = if force { Signal::SIGKILL } else { Signal::SIGTERM };
+        signal::kill(nix_pid, sig).map_err(|e| RuntimeError::Signal(e.to_string()))?;
+    }
+    #[cfg(windows)]
+    {
+        let pid_str = format!("{pid}");
+        let mut args = vec!["/PID", pid_str.as_str()];
+        if force { args.push("/F"); }
+        Command::new("taskkill")
+            .args(args)
+            .output()
+            .map_err(|e| RuntimeError::Signal(e.to_string()))?;
+    }
     Ok(())
 }
 

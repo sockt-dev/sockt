@@ -1,10 +1,13 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { SqliteTaskStore, FsmEngine, TaskClaimLock } from "@sockt/fsm";
 import type { TelemetryEmitter } from "@sockt/types";
 import type { LockManager } from "../lock/lock-manager.ts";
+import type { AgentRegistry } from "../registry/agent-registry.ts";
 import { taskRoutes } from "./routes/tasks.ts";
 import { approvalRoutes } from "./routes/approvals.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { agentRoutes } from "./routes/agents.ts";
 import { ApprovalStore } from "./approval-store.ts";
 
 export interface OrchestratorApiDeps {
@@ -12,6 +15,7 @@ export interface OrchestratorApiDeps {
   fsm: FsmEngine;
   claimLock: TaskClaimLock;
   lockManager: LockManager;
+  registry: AgentRegistry;
   telemetry?: TelemetryEmitter;
 }
 
@@ -24,6 +28,8 @@ export class OrchestratorApi {
     this.app = new Hono();
     const approvalStore = new ApprovalStore();
 
+    this.app.use("*", cors());
+
     const tasks = taskRoutes({
       store: deps.store,
       fsm: deps.fsm,
@@ -33,6 +39,7 @@ export class OrchestratorApi {
     });
 
     const approvals = approvalRoutes(approvalStore);
+    const agents    = agentRoutes(deps.registry);
 
     const health = healthRoutes({
       store: deps.store,
@@ -42,6 +49,7 @@ export class OrchestratorApi {
 
     this.app.route("/", tasks);
     this.app.route("/", approvals);
+    this.app.route("/", agents);
     this.app.route("/", health);
 
     this.app.notFound((c) => c.json({ error: "Not found" }, 404));

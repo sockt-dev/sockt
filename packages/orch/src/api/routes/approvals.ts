@@ -4,6 +4,10 @@ import type { ApprovalStore } from "../approval-store.ts";
 export function approvalRoutes(approvalStore: ApprovalStore): Hono {
   const app = new Hono();
 
+  app.get("/approvals/pending", (c) => {
+    return c.json(approvalStore.listPending());
+  });
+
   app.post("/approvals", async (c) => {
     const body = await c.req.json();
     const approval = approvalStore.create(body);

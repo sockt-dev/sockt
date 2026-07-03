@@ -238,76 +238,61 @@ fn collect_files_relative(base: &Path, dir: &Path, files: &mut Vec<String>) -> R
 fn search(gbrain_dir: &Path, query: &str, file_glob: Option<&str>, context: usize, limit: usize) -> Result<()> {
     ensure_gbrain_exists(gbrain_dir)?;
 
-    let mut cmd = ProcessCommand::new("grep");
-    cmd.arg("-rn")
-        .arg("--include=*.md")
-        .arg(format!("-C{}", context));
-
-    if let Some(glob) = file_glob {
-        cmd.arg(format!("--include={}", glob));
-    }
-
-    cmd.arg(query).arg(gbrain_dir);
-
-    let output = cmd.output().context("Failed to run grep")?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    if stdout.is_empty() {
-        println!("  No results for '{}'. Try broader terms or check `sockt brain show MEMORY.md`", query);
-        return Ok(());
-    }
-
-    let gbrain_prefix = format!("{}/", gbrain_dir.display());
+    let ext_filter = file_glob.unwrap_or("*.md");
+    let ext = ext_filter.trim_start_matches('*').trim_start_matches('.');
+    let query_lower = query.to_lowercase();
     let mut result_count = 0usize;
-    let mut current_file: Option<String> = None;
+    let mut first = true;
 
-    for line in stdout.lines() {
-        if result_count >= limit {
-            break;
-        }
+    let files = collect_files(gbrain_dir, ext);
+    for file in files {
+        if result_count >= limit { break; }
+        let content = std::fs::read_to_string(&file).unwrap_or_default();
+        let lines: Vec<&str> = content.lines().collect();
+        let rel = file.strip_prefix(gbrain_dir).unwrap_or(&file);
 
-        let display_line = line.strip_prefix(&gbrain_prefix).unwrap_or(line);
-
-        if line.contains(':') && !line.starts_with('-') && !line.starts_with("--") {
-            let is_new_match = display_line.split(':').nth(1)
-                .and_then(|n| n.parse::<usize>().ok())
-                .is_some();
-
-            if is_new_match {
-                let file_part = display_line.split(':').next().unwrap_or("");
-                if current_file.as_deref() != Some(file_part) {
-                    if current_file.is_some() {
-                        println!();
-                    }
-                    current_file = Some(file_part.to_string());
-                    let line_num = display_line.split(':').nth(1).unwrap_or("?");
-                    println!("  {}:{}", file_part, line_num);
+        for (i, line) in lines.iter().enumerate() {
+            if result_count >= limit { break; }
+            if line.to_lowercase().contains(&query_lower) {
+                if !first { println!("--"); }
+                first = false;
+                // context before
+                let start = i.saturating_sub(context);
+                for ci in start..i {
+                    println!("  {}:{}: {}", rel.display(), ci + 1, lines[ci]);
+                }
+                // match line
+                println!("\x1b[32m  {}:{}:\x1b[0m {}", rel.display(), i + 1, line);
+                // context after
+                let end = (i + 1 + context).min(lines.len());
+                for ci in (i + 1)..end {
+                    println!("  {}:{}: {}", rel.display(), ci + 1, lines[ci]);
                 }
                 result_count += 1;
             }
         }
-
-        let content_part = if let Some(stripped) = display_line.strip_prefix(&format!("{}:", current_file.as_deref().unwrap_or(""))) {
-            if let Some(after_num) = stripped.split_once(':') {
-                after_num.1
-            } else {
-                stripped
-            }
-        } else {
-            display_line
-        };
-        println!("    │ {}", content_part);
     }
 
-    println!();
-    println!("  {} result{} across {} file{}",
-        result_count.min(limit),
-        if result_count.min(limit) == 1 { "" } else { "s" },
-        current_file.iter().count().max(1),
-        if current_file.iter().count().max(1) == 1 { "" } else { "s" }
-    );
-
+    if result_count == 0 {
+        println!("  No results for '{}'. Try broader terms or check `sockt brain show MEMORY.md`", query);
+    } else {
+        println!("\n  {} match(es)", result_count);
+    }
     Ok(())
+}
+
+fn collect_files(dir: &Path, ext: &str) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else { return files };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_files(&path, ext));
+        } else if path.extension().and_then(|e| e.to_str()).map(|e| e == ext).unwrap_or(false) {
+            files.push(path);
+        }
+    }
+    files
 }
 
 fn show_log(gbrain_dir: &Path, agent: Option<&str>, since: Option<&str>, limit: usize, oneline: bool) -> Result<()> {

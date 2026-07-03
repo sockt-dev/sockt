@@ -46,14 +46,11 @@ pub async fn run(args: ConnectArgs, _config_path: Option<PathBuf>) -> Result<()>
     // 4. Tail log file with color formatting
     println!("📡 Connected to {} (Ctrl+C to detach)\n", agent_name);
 
-    // Setup signal handler for Ctrl+C
-    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-
     let mut last_pos = std::fs::metadata(&log_file)?.len();
 
     loop {
         tokio::select! {
-            _ = sigint.recv() => {
+            _ = tokio::signal::ctrl_c() => {
                 println!("\n✓ Detached from {}", agent_name);
                 break;
             }

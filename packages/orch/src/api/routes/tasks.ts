@@ -68,13 +68,94 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
     return c.json(result);
   });
 
+  // Static routes before parameterised — Hono matches in definition order
   app.get("/tasks/pending", async (c) => {
     const tenantId = c.req.query("tenantId");
-    if (!tenantId) {
-      return c.json({ error: "tenantId query parameter required" }, 400);
-    }
+    if (!tenantId) return c.json({ error: "tenantId query parameter required" }, 400);
     const tasks = await store.listPending(tenantId);
     return c.json(tasks);
+  });
+
+  app.get("/tasks", async (c) => {
+    const tenantId = c.req.query("tenantId");
+    if (!tenantId) return c.json({ error: "tenantId required" }, 400);
+    const status = c.req.query("status") as Parameters<typeof store.listAll>[1];
+    const tasks = await store.listAll(tenantId, status);
+    return c.json(tasks);
+  });
+
+  app.get("/tasks/:id", async (c) => {
+    const task = await store.get(c.req.param("id"));
+    if (!task) return c.json({ error: "Task not found" }, 404);
+    return c.json(task);
+  });
+
+  app.patch("/tasks/:id", async (c) => {
+    const taskId = c.req.param("id");
+    const body = await c.req.json();
+    const { status, output } = body;
+    try {
+      const patch: { status?: Parameters<typeof store.update>[1]["status"]; output?: string } = {};
+      if (status) patch.status = status;
+      if (output !== undefined) patch.output = output;
+      const task = await store.update(taskId, patch);
+      return c.json(task);
+    } catch {
+      return c.json({ error: "Task not found" }, 404);
+    }
+  });
+
+  app.post("/tasks/:id/cancel", async (c) => {
+    const taskId = c.req.param("id");
+    const task = await store.get(taskId);
+    if (!task) return c.json({ error: "Task not found" }, 404);
+    try {
+      const updated = await store.update(taskId, { status: "cancelled" });
+      telemetry?.emit({ type: "task_cancelled", taskId, tenantId: task.tenantId, data: {} });
+      return c.json(updated);
+    } catch {
+      return c.json({ error: "Cannot cancel task" }, 400);
+    }
+  });
+
+  app.post("/tasks/:id/retry", async (c) => {
+    const taskId = c.req.param("id");
+    const task = await store.get(taskId);
+    if (!task) return c.json({ error: "Task not found" }, 404);
+    try {
+      const updated = await store.update(taskId, { status: "pending" });
+      telemetry?.emit({ type: "task_retried", taskId, tenantId: task.tenantId, data: {} });
+      return c.json(updated);
+    } catch {
+      return c.json({ error: "Cannot retry task" }, 400);
+    }
+  });
+
+  app.post("/tasks/:id/approve", async (c) => {
+    const taskId = c.req.param("id");
+    const task = await store.get(taskId);
+    if (!task) return c.json({ error: "Task not found" }, 404);
+    try {
+      const updated = await store.update(taskId, { status: "pending" });
+      telemetry?.emit({ type: "task_approved", taskId, tenantId: task.tenantId, data: {} });
+      return c.json(updated);
+    } catch {
+      return c.json({ error: "Cannot approve task" }, 400);
+    }
+  });
+
+  app.post("/tasks/:id/reject", async (c) => {
+    const taskId = c.req.param("id");
+    const { reason } = await c.req.json().catch(() => ({ reason: undefined }));
+    const task = await store.get(taskId);
+    if (!task) return c.json({ error: "Task not found" }, 404);
+    try {
+      const updated = await store.update(taskId, { status: "cancelled", output: reason });
+      telemetry?.emit({ type: "task_rejected", taskId, tenantId: task.tenantId, data: { reason } });
+      return c.json(updated);
+    } catch {
+      return c.json({ error: "Cannot reject task" }, 400);
+    }
   });
 
   app.post("/tasks", async (c) => {

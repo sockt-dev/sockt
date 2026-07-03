@@ -45,6 +45,10 @@ export class ApprovalStore {
     return this.approvals.get(id);
   }
 
+  listPending(): StoredApproval[] {
+    return [...this.approvals.values()].filter(a => a.status === "pending");
+  }
+
   decide(id: string, decision: { status: ApprovalStatus; decidedBy?: string; reason?: string }): StoredApproval | undefined {
     const approval = this.approvals.get(id);
     if (!approval) return undefined;
