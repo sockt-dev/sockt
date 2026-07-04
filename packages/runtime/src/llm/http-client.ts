@@ -14,10 +14,23 @@ import { getProvider } from "./providers.ts";
 import { withRetry } from "./retry.ts";
 import { estimateMessagesTokens } from "./token-counter.ts";
 
+const INTER_CALL_DELAY_MS = Number(process.env.LLM_CALL_DELAY_MS ?? 0);
+
 export class HttpLlmClient implements LlmClient {
+  private lastCallAt = 0;
+
   constructor(private defaultConfig?: LlmConfig) {}
 
+  private async throttle(): Promise<void> {
+    const since = Date.now() - this.lastCallAt;
+    if (since < INTER_CALL_DELAY_MS) {
+      await Bun.sleep(INTER_CALL_DELAY_MS - since);
+    }
+    this.lastCallAt = Date.now();
+  }
+
   async chat(request: LlmRequest): Promise<LlmResponse> {
+    await this.throttle();
     const config = request.config ?? this.defaultConfig;
     if (!config) throw new LlmError("No LLM config provided", {});
 
@@ -54,7 +67,10 @@ export class HttpLlmClient implements LlmClient {
     }
 
     try {
-      const result = await withRetry(() => generateText(options));
+      const result = await withRetry(() => generateText({
+        ...options,
+        abortSignal: AbortSignal.timeout(90_000),
+      }));
       return this.convertResponse(result, config.model);
     } catch (error) {
       if (error instanceof Error) {

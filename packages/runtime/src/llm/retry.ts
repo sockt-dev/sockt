@@ -16,7 +16,12 @@ export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promis
       }
 
       lastError = error;
-      const delay = Math.min(100 * 2 ** attempt, 5000);
+      const isRateLimit = (error instanceof Error && error.message.includes("429")) ||
+        (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 429);
+      const delay = isRateLimit
+        ? Math.min(15_000 * (attempt + 1), 60_000)   // 15s, 30s, 45s for rate limits
+        : Math.min(100 * 2 ** attempt, 5000);          // normal exponential backoff
+      console.warn(`[llm] attempt ${attempt + 1} failed${isRateLimit ? " (rate limit)" : ""}, retrying in ${delay}ms`);
       await Bun.sleep(delay);
     }
   }

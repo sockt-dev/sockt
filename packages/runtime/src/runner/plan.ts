@@ -1,21 +1,34 @@
 import type { LlmClient } from "@sockt/types";
 import type { ExecutionContext, PlanResult, PlanStep } from "../types.ts";
 
-const PLAN_INSTRUCTION = `Based on the task description and context, create a step-by-step execution plan.
+function buildPlanInstruction(maxSteps: number): string {
+  return `Based on the task description and context, create a concise step-by-step execution plan.
 Respond with a JSON object in this exact format:
 {"steps": [{"description": "what to do", "tool": "tool_name_if_needed", "args": {"key": "value"}}]}
 
-Each step should be atomic and achievable. The "tool" and "args" fields are optional - only include them if a tool call is needed.
-Keep the plan concise (max 10 steps).`;
+Rules:
+- Maximum ${maxSteps} steps — stay well within this limit
+- Each step must be atomic and achievable in one action
+- Prefer fewer, broader steps over many narrow ones
+- The "tool" and "args" fields are optional — only include if a specific tool is needed
+- For simple text/research tasks, 1-2 steps is usually enough`;
+}
 
 export async function planPhase(
   ctx: ExecutionContext,
   llmClient: LlmClient,
   maxSteps: number,
 ): Promise<PlanResult> {
+  // Budget-aware step limit — leave 1 slot free for reflect
+  const stepsAllowed = Math.max(1, Math.min(maxSteps, ctx.budgetRemaining - 1));
+  // Keep full history for planning if context is small; trim to system prompt if large
+  const contextLimit = Number(process.env.PLAN_CONTEXT_MESSAGES ?? 0);
+  const planHistory = contextLimit > 0
+    ? [ctx.messages[0], ...ctx.messages.slice(-contextLimit)]
+    : ctx.messages.slice(0, 1); // system prompt only by default (token-efficient)
   const planMessages = [
-    ...ctx.messages,
-    { role: "user" as const, content: PLAN_INSTRUCTION },
+    ...planHistory,
+    { role: "user" as const, content: buildPlanInstruction(stepsAllowed) },
   ];
 
   const response = await llmClient.chat({
@@ -23,7 +36,7 @@ export async function planPhase(
     config: ctx.agent.llmConfig,
   });
 
-  ctx.messages.push({ role: "user", content: PLAN_INSTRUCTION });
+  ctx.messages.push({ role: "user", content: buildPlanInstruction(stepsAllowed) });
   ctx.messages.push(response.message);
 
   const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);

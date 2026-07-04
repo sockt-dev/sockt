@@ -15,15 +15,39 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
   const { store, fsm, claimLock, lockManager, telemetry } = deps;
   const app = new Hono();
 
+  // Legacy: body contains { taskId, agentId }
   app.post("/tasks/claim", async (c) => {
     const { taskId, agentId } = await c.req.json();
     const task = await claimLock.attemptClaim(taskId, agentId);
-    if (!task) {
-      return c.json({ error: "Task unavailable" }, 409);
-    }
+    if (!task) return c.json({ error: "Task unavailable" }, 409);
     lockManager.acquire(agentId, taskId);
     telemetry?.emit({ type: "task_claimed", taskId, tenantId: task.tenantId, data: { agentId } });
     return c.json(task);
+  });
+
+  // Runtime style: taskId in URL, agentId in body
+  app.post("/tasks/:id/claim", async (c) => {
+    const taskId = c.req.param("id");
+    const { agentId } = await c.req.json();
+    const task = await claimLock.attemptClaim(taskId, agentId);
+    if (!task) return c.json({ error: "Task unavailable" }, 409);
+    lockManager.acquire(agentId, taskId);
+    telemetry?.emit({ type: "task_claimed", taskId, tenantId: task.tenantId, data: { agentId } });
+    return c.json(task);
+  });
+
+  // Runtime alias for llm-call budget tracking
+  app.post("/tasks/:id/record-llm-call", async (c) => {
+    const taskId = c.req.param("id");
+    const result = await store.incrementLlmCalls(taskId);
+    if (result.remaining <= 0) {
+      const task = await store.get(taskId);
+      if (task && task.status === "in_progress") {
+        await fsm.transition(taskId, "in_progress", "escalated", "system:budget");
+        telemetry?.emit({ type: "task_budget_exhausted", taskId, tenantId: task.tenantId, data: {} });
+      }
+    }
+    return c.json({ allowed: result.remaining > 0, remaining: result.remaining });
   });
 
   app.post("/tasks/:id/complete", async (c) => {

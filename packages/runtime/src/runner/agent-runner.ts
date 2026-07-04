@@ -129,6 +129,18 @@ export class AgentRunner {
         return outcome;
       }
 
+      // If budget nearly exhausted, complete with what we have rather than looping
+      if (ctx.budgetRemaining <= 1) {
+        const lastObservation = ctx.trace.getSteps()
+          .filter(s => s.phase === "observe")
+          .map(s => typeof s.output === "string" ? s.output : JSON.stringify(s.output ?? ""))
+          .pop() ?? "Task steps executed";
+        const outcome: TaskOutcome = { status: "completed", output: lastObservation };
+        ctx.trace.setOutcome(outcome);
+        await this.onComplete(ctx);
+        return outcome;
+      }
+
       const reflection = await reflectPhase(ctx, this.config.llmClient);
       ctx.trace.addStep({
         phase: "reflect",

@@ -42,6 +42,10 @@ export class HttpOrchClient implements OrchClient {
     return this.post<Task>("/tasks", task);
   }
 
+  async registerAgent(agent: import("@sockt/types").AgentConfig): Promise<void> {
+    await this.post("/agents/register", agent);
+  }
+
   private async get<T>(path: string): Promise<T> {
     return this.request<T>("GET", path);
   }

@@ -15,8 +15,26 @@ export async function reflectPhase(
   ctx: ExecutionContext,
   llmClient: LlmClient,
 ): Promise<ReflectionResult> {
+  // Build a compact summary from trace steps instead of full message history.
+  // This keeps reflect context tiny (< 400 tokens) regardless of steps taken.
+  const steps = ctx.trace.getSteps?.() ?? [];
+  const stepSummary = steps
+    .filter(s => s.phase === "act" || s.phase === "observe")
+    .map((s, i) => {
+      const out = typeof s.output === "string"
+        ? s.output.slice(0, 120)
+        : JSON.stringify(s.output ?? "").slice(0, 120);
+      return `${i + 1}. [${s.phase}] ${s.action}: ${out}`;
+    })
+    .join("\n");
+
+  const summaryMessage = stepSummary
+    ? `Steps completed:\n${stepSummary}`
+    : "No steps recorded.";
+
   const reflectMessages = [
-    ...ctx.messages,
+    ctx.messages[0], // system prompt only
+    { role: "user" as const, content: summaryMessage },
     { role: "user" as const, content: REFLECT_INSTRUCTION },
   ];
 

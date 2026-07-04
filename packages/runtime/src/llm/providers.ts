@@ -1,6 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { createGroq } from "@ai-sdk/groq";
 import type { LlmConfig } from "@sockt/types";
 import { LlmError } from "@sockt/types";
 
@@ -30,6 +31,8 @@ export function getProvider(config: LlmConfig) {
           "X-Title": "Sockt",
         },
       });
+    case "groq":
+      return createGroq({ apiKey: config.apiKey });
     case "ollama":
       return createOpenAI({
         baseURL: config.baseUrl ?? "http://localhost:11434/v1",
