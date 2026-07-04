@@ -31,13 +31,13 @@ const agentConfig: AgentConfig = {
   role: agentRole,
   llmConfig,
   systemPrompt: `You are a ${agentRole} agent in the ${department} department. Complete tasks thoroughly and concisely.`,
-  tools: ["web_search", "write_file", "read_file", "create_task", "http_request"],
+  tools: ["web_search", "write_file", "read_file", "create_task", "http_request", "exec_code"],
   department,
   maxConcurrentTasks: maxConcurrent,
 };
 
 const toolRegistry = new ToolRegistry();
-registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId });
+registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id });
 
 const llmClient = new HttpLlmClient(llmConfig);
 const orchClient = new HttpOrchClient({ baseUrl: orchUrl });

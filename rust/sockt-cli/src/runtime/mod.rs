@@ -84,6 +84,51 @@ pub fn remove_runtime_state() -> Result<()> {
     Ok(())
 }
 
+/// Check whether the Docker AI Sandbox CLI (`sbx`) is installed and authenticated.
+pub fn sbx_available() -> bool {
+    Command::new("sbx").arg("ls").arg("--json")
+        .stdout(Stdio::null()).stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Spawn an agent runtime inside a Docker AI Sandbox microVM (`sbx run`).
+/// Falls back to `spawn_bun_service` if sbx is not available.
+pub fn spawn_sbx_agent(
+    package_path: &str,
+    env_vars: HashMap<String, String>,
+    name: &str,
+) -> Result<ServicePid> {
+    if !sbx_available() {
+        eprintln!("  [sbx] not available — falling back to unsandboxed Bun process");
+        return spawn_bun_service(package_path, env_vars, name);
+    }
+
+    let sandbox_name = format!("sockt-{}", name)
+        .to_lowercase()
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-");
+
+    // sbx run --name <sandbox> --detach -- bun run <package>
+    let mut cmd = Command::new("sbx");
+    cmd.args(["run", "--name", &sandbox_name, "--detach", "--"])
+        .arg("bun").arg("run").arg(package_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .envs(&env_vars);
+
+    let child = cmd.spawn()
+        .map_err(|e| RuntimeError::SpawnFailed(format!("sbx: {e}")))?;
+
+    let pid = child.id();
+    let port = env_vars.get("PORT").and_then(|p| p.parse::<u16>().ok());
+
+    eprintln!("  [sbx] agent '{sandbox_name}' running in Docker AI Sandbox (microVM)");
+
+    Ok(ServicePid { name: name.to_string(), pid, port })
+}
+
 /// Spawn a Bun process as a daemon
 pub fn spawn_bun_service(
     package_path: &str,

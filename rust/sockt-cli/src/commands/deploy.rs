@@ -8,7 +8,8 @@ use crate::config::loader::ConfigLoader;
 use crate::config::SocktConfig;
 use crate::crypto::{self, KeyManager};
 use crate::runtime::{
-    check_health, is_process_alive, load_runtime_state, save_runtime_state, spawn_bun_service,
+    check_health, is_process_alive, load_runtime_state, save_runtime_state,
+    spawn_bun_service, spawn_sbx_agent, sbx_available,
     RuntimeState, ServicePid,
 };
 
@@ -386,10 +387,19 @@ async fn poll_health_with_progress(url: &str, timeout_secs: u64) -> Result<()> {
 }
 
 pub(crate) fn spawn_single_service(config: &ServiceConfig) -> Result<ServicePid> {
-    println!("    {:<15} starting... [daemon]", config.name);
+    // Agent services run in Docker AI Sandboxes (microVMs) when sbx is available.
+    // Infrastructure services (orch, gbrain, cadvp) always run as plain Bun processes.
+    let is_agent = config.name.starts_with("agent-");
 
-    spawn_bun_service(&config.package_path, config.env_vars.clone(), &config.name)
-        .context(format!("Failed to spawn {}", config.name))
+    if is_agent && sbx_available() {
+        println!("    {:<15} starting... [sbx microVM]", config.name);
+        spawn_sbx_agent(&config.package_path, config.env_vars.clone(), &config.name)
+            .context(format!("Failed to spawn {} in sbx", config.name))
+    } else {
+        println!("    {:<15} starting... [daemon]", config.name);
+        spawn_bun_service(&config.package_path, config.env_vars.clone(), &config.name)
+            .context(format!("Failed to spawn {}", config.name))
+    }
 }
 
 // ============================================================================
