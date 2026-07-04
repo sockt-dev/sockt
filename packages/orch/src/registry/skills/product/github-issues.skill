@@ -1,0 +1,24 @@
+{
+  "name": "github-issues",
+  "description": "Create well-structured GitHub issues from product specs with user stories acceptance criteria labels and technical context for engineering handoff",
+  "steps": [
+    { "action": "Extract issue scope from spec: one issue per user story or one issue per independent deliverable", "expectedOutcome": "Issue breakdown list — each issue completable in 1-3 days of engineering work" },
+    { "action": "Write issue title: [Type]: Short imperative description (e.g. 'feat: Add email verification flow')", "expectedOutcome": "Title following conventional commit format" },
+    { "action": "Write issue body: User Story + Context + Acceptance Criteria (Given/When/Then) + Technical Notes + Out of Scope", "expectedOutcome": "Complete issue body engineers can pick up without follow-up questions" },
+    { "action": "Assign labels: type (bug/feat/chore), priority (p0/p1/p2), size (xs/s/m/l/xl)", "expectedOutcome": "Labels list for each issue" },
+    { "action": "Create issues via GitHub API or save to file for manual creation", "tool": "http_request", "args": { "method": "POST", "url": "https://api.github.com/repos/{owner}/{repo}/issues" } }
+  ],
+  "preconditions": [
+    "Product spec or PRD available",
+    "GitHub repository identified",
+    "GitHub token in GITHUB_TOKEN env var if using API"
+  ],
+  "successCriteria": [
+    "Each issue is independently completable",
+    "Acceptance criteria are testable and specific",
+    "No implementation details prescribed — what not how",
+    "Out of scope section prevents unbounded scope"
+  ],
+  "compiledFrom": "community/github-issue-creator + neolabhq/context-engineering-kit@attach-review-to-pr",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

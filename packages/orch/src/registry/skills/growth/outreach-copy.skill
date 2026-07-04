@@ -1,0 +1,25 @@
+{
+  "name": "outreach-copy",
+  "description": "Write cold outreach copy and sales messaging using AIDA PAS copywriting frameworks for LinkedIn cold email and social media prospecting",
+  "steps": [
+    { "action": "Research prospect: company, recent news, role, likely pain points using web_search", "tool": "web_search" },
+    { "action": "Select framework: AIDA (Attention-Interest-Desire-Action) for cold, PAS (Problem-Agitate-Solution) for pain-aware", "expectedOutcome": "Framework selected based on prospect awareness level" },
+    { "action": "Write personalised opening line referencing specific prospect detail (not generic)", "expectedOutcome": "Hook line that proves research was done" },
+    { "action": "Draft message body: value proposition tied to their specific situation, not generic features", "expectedOutcome": "Message under 150 words with clear relevance" },
+    { "action": "Write CTA: single low-friction ask (15-min call, reply with interest, specific question)", "expectedOutcome": "One clear next step that is easy to say yes to" },
+    { "action": "Save outreach copy variants to file for review", "tool": "write_file", "args": { "filename": "outreach_copy.md" } }
+  ],
+  "preconditions": [
+    "Prospect company and role identified",
+    "Value proposition and ICP pain points defined",
+    "Outreach channel decided (email, LinkedIn, other)"
+  ],
+  "successCriteria": [
+    "Message is under 150 words for cold outreach",
+    "Opening line is personalised and not generic",
+    "One and only one CTA",
+    "No feature-dumping — focuses on prospect outcome"
+  ],
+  "compiledFrom": "thatrebeccarae/claude-marketing@copywriting-frameworks + iamzifei/show-me-the-money@money-outreach",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

@@ -1,0 +1,25 @@
+{
+  "name": "deployment-engineer",
+  "description": "Plan and execute safe deployments canary blue-green rolling rollback procedures with health monitoring and automated validation checks",
+  "steps": [
+    { "action": "Select deployment strategy based on risk: canary (new feature, high risk), blue-green (zero downtime), rolling (stateful services), direct (dev/staging)", "expectedOutcome": "Strategy selected with risk rationale" },
+    { "action": "Write pre-deployment checklist: tests passing, migrations ready, feature flags configured, rollback plan documented", "expectedOutcome": "Pre-deploy gate checklist — all must pass before proceeding" },
+    { "action": "Execute deployment in isolated sandbox to validate deployment script", "tool": "exec_code", "args": { "language": "bash", "code": "# deployment validation script here" } },
+    { "action": "Monitor key SLIs during and after deployment: error rate, p95 latency, success rate vs baseline", "tool": "http_request", "expectedOutcome": "SLI comparison: pre-deploy vs post-deploy values" },
+    { "action": "Run automated smoke tests against the new deployment to confirm core paths work", "expectedOutcome": "Smoke test results: pass/fail per critical user journey" },
+    { "action": "Document deployment outcome: version, timestamp, duration, SLI impact, any issues", "tool": "write_file", "args": { "filename": "deployment_log.md" } }
+  ],
+  "preconditions": [
+    "Deployment target environment and service identified",
+    "Rollback procedure exists and tested",
+    "SLI baselines measured (error rate, latency before deployment)"
+  ],
+  "successCriteria": [
+    "Zero increase in error rate post-deployment",
+    "Latency within 10% of pre-deployment baseline",
+    "All smoke tests passing",
+    "Rollback capability confirmed and documented"
+  ],
+  "compiledFrom": "community/deployment-engineer + community/deployment-procedures + vasilyu1983/ai-agents-public@ops-devops-platform",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

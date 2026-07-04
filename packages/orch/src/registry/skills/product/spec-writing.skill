@@ -1,0 +1,25 @@
+{
+  "name": "spec-writing",
+  "description": "Write product requirement documents PRDs one-pagers technical specs user stories with acceptance criteria for engineering handoff",
+  "steps": [
+    { "action": "Write Problem Statement: who has the problem, how often, what is the current workaround", "expectedOutcome": "1-2 sentence problem definition grounded in user reality" },
+    { "action": "Define Users section: primary persona, secondary persona, out-of-scope users", "expectedOutcome": "Clear user definitions prevent scope creep" },
+    { "action": "Write Goals and Non-Goals: what success looks like and explicitly what we are NOT building", "expectedOutcome": "Measurable success metric + explicit out-of-scope list" },
+    { "action": "Write Requirements: functional (must do) vs non-functional (performance, security, accessibility)", "expectedOutcome": "Numbered requirements list, each testable and unambiguous" },
+    { "action": "Write User Stories with Acceptance Criteria: As a [user] I want [action] So that [outcome] — Given/When/Then format", "expectedOutcome": "Each story has 3+ acceptance criteria that can be tested" },
+    { "action": "Save complete spec to file", "tool": "write_file", "args": { "filename": "prd.md" } }
+  ],
+  "preconditions": [
+    "User problem clearly articulated",
+    "Stakeholder alignment on priority",
+    "Technical constraints known or flagged as TBD"
+  ],
+  "successCriteria": [
+    "Spec is max 1 page for features, 3 pages for epics",
+    "Every requirement is testable — no vague words like 'fast' or 'easy'",
+    "Non-goals section exists and is non-empty",
+    "Success metrics are measurable with baseline and target values"
+  ],
+  "compiledFrom": "community/spec-to-code-compliance + davila7/claude-code-templates@ai-product",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

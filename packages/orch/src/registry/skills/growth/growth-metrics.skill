@@ -1,0 +1,22 @@
+{
+  "name": "growth-metrics",
+  "description": "Apply AARRR pirate metrics framework calculate viral coefficient K-factor and funnel conversion analysis for growth strategy and reporting",
+  "steps": [
+    { "action": "Map current state across AARRR: Acquisition, Activation, Retention, Revenue, Referral", "expectedOutcome": "Baseline metrics snapshot per funnel stage" },
+    { "action": "Identify the biggest leaking stage (lowest conversion) as priority", "expectedOutcome": "Single priority funnel stage to improve" },
+    { "action": "Calculate K-factor: (% who invite) × (invites per user) × (conversion rate)", "expectedOutcome": "K-factor score — >1 viral, >0.5 good, >0.2 ok, <0.2 needs work" },
+    { "action": "Propose 3 experiments targeting the priority stage with expected lift", "expectedOutcome": "Experiment backlog with hypothesis and success metric per experiment" },
+    { "action": "Write growth report to file with current metrics, bottleneck, experiments", "tool": "write_file", "args": { "filename": "growth_report.md" } }
+  ],
+  "preconditions": [
+    "Access to product analytics data or approximate metrics",
+    "Business model and conversion goals defined"
+  ],
+  "successCriteria": [
+    "All AARRR stages have a metric and a current value",
+    "K-factor calculated with component breakdown",
+    "At least 3 prioritised experiments with measurable hypotheses"
+  ],
+  "compiledFrom": "community/growth-engine + aradotso/marketing-skills@seo-content-marketing-skills",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

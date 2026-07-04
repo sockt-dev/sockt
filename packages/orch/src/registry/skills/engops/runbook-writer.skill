@@ -1,0 +1,26 @@
+{
+  "name": "runbook-writer",
+  "description": "Write operational runbooks for recurring DevOps tasks deployment rollback database maintenance alert response with trigger prerequisites steps validation rollback",
+  "steps": [
+    { "action": "Define runbook trigger: what event or alert causes this runbook to be executed", "expectedOutcome": "Clear trigger condition — specific alert name, metric threshold, or manual trigger" },
+    { "action": "Write Prerequisites section: tools, access, environment variables, and knowledge required before starting", "expectedOutcome": "Checklist an on-call engineer can verify before starting" },
+    { "action": "Write Step-by-Step procedure: numbered commands with expected output for each step", "expectedOutcome": "Steps so specific that a junior engineer on first on-call shift can execute them" },
+    { "action": "Write Validation section: how to confirm the runbook worked (health checks, metrics, functional tests)", "expectedOutcome": "Pass/fail criteria for each validation check" },
+    { "action": "Write Rollback procedure: step-by-step reversal if runbook causes problems", "expectedOutcome": "Complete rollback path — never publish a runbook without a rollback" },
+    { "action": "Write Escalation path: who to contact and how if runbook fails or situation worsens", "expectedOutcome": "Named escalation contacts with contact method and SLA" },
+    { "action": "Save runbook to file", "tool": "write_file", "args": { "filename": "runbook.md" } }
+  ],
+  "preconditions": [
+    "Operational procedure or recurring task identified",
+    "SME knowledge of the procedure available",
+    "Target audience skill level known (junior vs senior on-call)"
+  ],
+  "successCriteria": [
+    "Runbook can be executed by someone who has never done it before",
+    "Every command has expected output documented",
+    "Rollback section is complete and tested",
+    "Validation confirms actual system state not just command success"
+  ],
+  "compiledFrom": "aj-geddes/useful-ai-prompts@runbook-creation + community/incident-runbook-templates",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

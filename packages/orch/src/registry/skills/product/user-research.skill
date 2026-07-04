@@ -1,0 +1,24 @@
+{
+  "name": "user-research",
+  "description": "Design user interview scripts synthesise qualitative feedback build Jobs-to-be-Done statements and persona updates from research data",
+  "steps": [
+    { "action": "Write interview script: 5-7 open-ended questions exploring the job-to-be-done not the product", "expectedOutcome": "Interview guide — questions that surface context, not opinions about features" },
+    { "action": "For existing feedback: cluster verbatim quotes by theme, count theme frequency", "expectedOutcome": "Theme clusters with supporting quotes and frequency count" },
+    { "action": "Write JTBD statements: When [situation] I want to [motivation] So I can [outcome]", "expectedOutcome": "3-5 primary Jobs-to-be-Done statements per segment" },
+    { "action": "Prioritise pain points by: frequency (how many users) × intensity (how painful) × current solution quality", "expectedOutcome": "Pain point priority matrix with scores" },
+    { "action": "Write research report with insights, JTBD statements, and product implications", "tool": "write_file", "args": { "filename": "user_research_report.md" } }
+  ],
+  "preconditions": [
+    "User segment or persona defined",
+    "Research question or hypothesis stated",
+    "Access to user feedback, interviews, or support tickets"
+  ],
+  "successCriteria": [
+    "JTBD statements describe motivations not features",
+    "Every insight is backed by at least 3 user data points",
+    "Pain points have frequency and intensity scores",
+    "Clear product implications — not just observations"
+  ],
+  "compiledFrom": "community/ux-feedback + community/product-design",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

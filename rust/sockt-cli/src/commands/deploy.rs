@@ -326,6 +326,14 @@ fn create_agent_configs(
             .join("scratch");
         env_vars.insert("SCRATCH_DIR".to_string(), scratch.to_string_lossy().to_string());
 
+        // Point each agent at its department skills directory
+        let skills_dir = monorepo
+            .join("packages/orch/src/registry/skills")
+            .join(dept);
+        if skills_dir.exists() {
+            env_vars.insert("SKILLS_DIR".to_string(), skills_dir.to_string_lossy().to_string());
+        }
+
         configs.push(ServiceConfig {
             name: name.to_string(),
             package_path: monorepo

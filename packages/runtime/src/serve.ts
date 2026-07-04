@@ -42,10 +42,20 @@ registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: a
 const llmClient = new HttpLlmClient(llmConfig);
 const orchClient = new HttpOrchClient({ baseUrl: orchUrl });
 
+// Department-specific skills directory — SkillCompiler loads .skill JSON files from here
+// Defaults to the bundled department skills inside the monorepo
+const defaultSkillsDir = new URL(
+  `../../orch/src/registry/skills/${department}`,
+  import.meta.url,
+).pathname.replace(/^\/([A-Za-z]:)/, "$1"); // strip leading slash on Windows paths
+
+const skillsDir = process.env.SKILLS_DIR ?? defaultSkillsDir;
+
 const runner = new AgentRunner({
   llmClient,
   toolRegistry,
   orchBaseUrl: orchUrl,
+  skillsDir,
 });
 
 // Self-register with orchestrator (retry until orch is ready)

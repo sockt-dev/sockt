@@ -1,0 +1,23 @@
+{
+  "name": "lead-generation",
+  "description": "Scrape and qualify leads from LinkedIn Apollo Google Maps Instagram and company websites using web search and HTTP API calls for outreach prospecting",
+  "steps": [
+    { "action": "Define ICP criteria: industry, company size, role, geography", "expectedOutcome": "Clear targeting criteria before any search" },
+    { "action": "Use web_search to find matching companies and contacts", "tool": "web_search", "args": { "query": "{{ICP criteria}} companies site:linkedin.com OR apollo.io" } },
+    { "action": "Enrich leads with contact info via Apollo API or Hunter.io", "tool": "http_request", "args": { "method": "GET", "url": "https://api.apollo.io/v1/mixed_people/search" } },
+    { "action": "Score each lead: ICP fit (1-5), company size fit (1-5), role seniority (1-5)", "expectedOutcome": "Scored list with only leads scoring 10+" },
+    { "action": "Write qualified lead list to file with name, company, role, email, LinkedIn, score", "tool": "write_file", "args": { "filename": "qualified_leads.md" } }
+  ],
+  "preconditions": [
+    "ICP (Ideal Customer Profile) clearly defined",
+    "Target industry or geography known",
+    "Outreach goal and value prop defined"
+  ],
+  "successCriteria": [
+    "Minimum 10 qualified leads with contact information",
+    "Each lead has: company, name, role, email or LinkedIn URL",
+    "Leads scored and ranked by ICP fit"
+  ],
+  "compiledFrom": "apify/agent-skills@apify-lead-generation + community/growth-engine",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

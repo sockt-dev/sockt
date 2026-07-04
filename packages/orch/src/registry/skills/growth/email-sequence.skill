@@ -1,0 +1,24 @@
+{
+  "name": "email-sequence",
+  "description": "Write high-converting email sequences for welcome nurture sales re-engagement outreach campaigns with single CTA per email value-first approach",
+  "steps": [
+    { "action": "Identify sequence type: welcome, lead-nurture, sales, re-engagement, post-purchase", "expectedOutcome": "Sequence type and length determined (welcome=3-7, nurture=5-10)" },
+    { "action": "Define audience context: who triggered the sequence, what they know, relationship stage", "expectedOutcome": "Audience profile written" },
+    { "action": "Map the journey: each email's single job and CTA before writing", "expectedOutcome": "Email outline with subject lines, purpose, CTA per email" },
+    { "action": "Write each email following Value-Before-Ask principle with one CTA", "expectedOutcome": "Full email copy for every email in sequence" },
+    { "action": "Save complete sequence to file with timing notes (Day 0: immediate, Day 1: 1d, Day 3: 3d...)", "tool": "write_file", "args": { "filename": "email_sequence.md" } }
+  ],
+  "preconditions": [
+    "Sequence trigger and audience segment defined",
+    "Conversion goal identified",
+    "Brand voice and tone guidelines available"
+  ],
+  "successCriteria": [
+    "Each email has exactly one primary CTA",
+    "Sequence has clear value progression (educate → nurture → convert)",
+    "Subject lines are specific and curiosity-driven not clickbait",
+    "Timing and delays documented for each email"
+  ],
+  "compiledFrom": "louisblythe/salesskills@email-sequence + community/email-systems",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

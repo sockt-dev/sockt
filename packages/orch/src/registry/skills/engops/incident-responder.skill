@@ -1,0 +1,25 @@
+{
+  "name": "incident-responder",
+  "description": "SRE incident response triage severity classification P0 P1 P2 stabilisation rollback feature flags post-mortem blameless RCA AARRR five whys",
+  "steps": [
+    { "action": "Classify severity: P0=full outage/security breach (<15min ack), P1=major degradation (<1hr), P2=minor impact (<4hr), P3=cosmetic (next day)", "expectedOutcome": "Severity level with justification based on user and business impact" },
+    { "action": "Establish incident command: Incident Commander (decisions), Comms Lead (updates), Tech Lead (investigation)", "expectedOutcome": "Named roles assigned or flagged for escalation if human needed" },
+    { "action": "Immediate stabilisation: assess rollback, feature flags, circuit breakers, traffic throttling", "expectedOutcome": "Fastest path to service restoration identified and actioned" },
+    { "action": "Investigate with observability: check distributed traces, error rates, deployment timeline, config changes", "tool": "http_request", "expectedOutcome": "Root cause hypothesis with supporting evidence from metrics/logs" },
+    { "action": "Post status update: what happened, current status, ETA, next update time", "tool": "write_file", "args": { "filename": "incident_update.md" } },
+    { "action": "After resolution: write blameless post-mortem with timeline, 5 whys, contributing factors, action items", "tool": "write_file", "args": { "filename": "post_mortem.md" } }
+  ],
+  "preconditions": [
+    "Incident description with symptoms and first observed time",
+    "Access to observability tools or error logs",
+    "Deployment history for the past 24 hours if available"
+  ],
+  "successCriteria": [
+    "Severity classified with business impact quantified",
+    "Status update written within 15 minutes of incident start",
+    "Root cause identified with supporting evidence",
+    "Post-mortem has timeline, 5 whys, and actionable prevention items"
+  ],
+  "compiledFrom": "community/incident-responder + aj-geddes/useful-ai-prompts@runbook-creation",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

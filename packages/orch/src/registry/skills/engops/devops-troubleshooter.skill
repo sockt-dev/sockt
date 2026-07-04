@@ -1,0 +1,25 @@
+{
+  "name": "devops-troubleshooter",
+  "description": "Debug production issues using distributed tracing metrics correlation log analysis Prometheus Grafana DataDog ELK Splunk OpenTelemetry SLI SLO error budgets",
+  "steps": [
+    { "action": "Start with symptoms not assumptions: what changed? (deployments, config, traffic, dependencies) in the last 2 hours", "expectedOutcome": "Change timeline — the cause is almost always a recent change" },
+    { "action": "Check SLIs: error rate, p50/p95/p99 latency, saturation, traffic (USE method for infra)", "tool": "http_request", "expectedOutcome": "Current SLI values vs thresholds — identifies which layer is failing" },
+    { "action": "Correlate traces: find the slowest/erroring traces, identify which service boundary fails first", "expectedOutcome": "Root service identified in the call chain" },
+    { "action": "Analyse logs at the failing service: error messages, stack traces, unusual patterns around failure time", "expectedOutcome": "Specific error or condition causing the failure" },
+    { "action": "Form hypothesis: exact cause with evidence, test by checking if disabling/enabling it changes behaviour", "expectedOutcome": "Confirmed root cause with evidence from at least 2 data sources" },
+    { "action": "Write incident debug summary: symptoms, investigation steps, root cause, fix applied, prevention", "tool": "write_file", "args": { "filename": "debug_summary.md" } }
+  ],
+  "preconditions": [
+    "Access to observability tools or error logs",
+    "Deployment history available",
+    "SLI baselines known or estimable"
+  ],
+  "successCriteria": [
+    "Root cause confirmed from at least 2 independent data sources",
+    "Timeline established: when did it start, what changed before it",
+    "Fix tested and validated — not just applied and hoped",
+    "Prevention measure identified to stop recurrence"
+  ],
+  "compiledFrom": "community/devops-troubleshooter + 404kidwiz/claude-supercode-skills@devops-incident-responder",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}

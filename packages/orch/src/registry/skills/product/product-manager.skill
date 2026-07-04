@@ -1,0 +1,23 @@
+{
+  "name": "product-manager",
+  "description": "Senior PM frameworks RICE MoSCoW Jobs-to-be-Done Kano Opportunity Solution Tree North Star Metric PRDs roadmaps 32 SaaS metrics MRR ARR churn LTV CAC",
+  "steps": [
+    { "action": "Clarify: is this discovery (what to build), planning (when/how), or execution (track/launch)?", "expectedOutcome": "Mode selected — determines which frameworks to apply" },
+    { "action": "For prioritisation: score each item with RICE (Reach × Impact × Confidence / Effort)", "expectedOutcome": "RICE scores for all candidate items, ranked list" },
+    { "action": "For strategy: map with Opportunity Solution Tree (outcome → opportunities → solutions → experiments)", "expectedOutcome": "OST diagram or outline connecting goals to experiments" },
+    { "action": "For metrics: calculate relevant SaaS metrics — MRR, Churn Rate, LTV=ARPU/Churn, CAC, LTV:CAC ratio", "expectedOutcome": "Current metric values and targets" },
+    { "action": "Output structured artifact: PRD, roadmap, prioritised backlog, or metric dashboard", "tool": "write_file", "args": { "filename": "product_artifact.md" } }
+  ],
+  "preconditions": [
+    "Business goal or product problem clearly stated",
+    "Target user segment identified",
+    "Current metrics or baseline data available (even approximate)"
+  ],
+  "successCriteria": [
+    "Every recommendation has a RICE score or equivalent prioritisation rationale",
+    "Success metrics defined upfront — not just output metrics but leading indicators",
+    "Decisions documented with tradeoffs acknowledged"
+  ],
+  "compiledFrom": "Digidai/product-manager-skills@product-manager + rshankras/claude-code-apple-skills@product-development",
+  "compiledAt": "2026-07-04T00:00:00.000Z"
+}
