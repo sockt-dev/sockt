@@ -1,6 +1,6 @@
 {
   "name": "@sockt/memory",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,13 +11,15 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "workspace:*"
+    "@sockt/types": "^0.1.0"
   }
 }
