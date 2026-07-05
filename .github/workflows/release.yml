@@ -1,0 +1,406 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (without leading v, e.g. 0.2.0)'
+        required: true
+        type: string
+      publish:
+        description: 'Actually publish to npm / create GitHub release (else dry-run)'
+        required: false
+        type: boolean
+        default: true
+
+# Secrets required in repo:
+#   NPM_TOKEN   — automation token with publish rights for @sockt scope
+#   BUMPER_TOKEN (optional) — PAT with push access to main, used to commit version bumps.
+#                              Falls back to the default GITHUB_TOKEN if not set. If main
+#                              has branch protection requiring review, you MUST supply this.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump versions on main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      skipped: ${{ steps.skip.outputs.skipped }}
+    steps:
+      - name: Resolve release version
+        id: meta
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${GITHUB_REF_NAME#v}"
+          fi
+          VER="${VER#v}"
+          echo "Resolved version: $VER"
+          [ -z "$VER" ] && { echo "::error::No version resolved"; exit 1; }
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.BUMPER_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install cargo-edit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit
+
+      - name: Check if already bumped (idempotency)
+        id: skip
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          CURRENT=$(node -e 'console.log(require("./packages/types/package.json").version)')
+          echo "Current @sockt/types version: $CURRENT"
+          if [ "$CURRENT" = "$VER" ]; then
+            echo "Already bumped to $VER — skipping commit."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump @sockt/* package.json versions
+        if: steps.skip.outputs.skipped != 'true'
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          PACKAGES=(types fsm memory runtime orch cadvp)
+          for p in "${PACKAGES[@]}"; do
+            pkg="packages/$p/package.json"
+            # bump own version
+            npm version "$VER" --no-git-tag-version --prefix "packages/$p"
+            # rewrite workspace: protocol deps to released version
+            node -e '
+              const fs = require("fs");
+              const path = process.argv[1];
+              const ver = process.argv[2];
+              const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+              const rewrite = (dep) => dep ? Object.fromEntries(
+                Object.entries(dep).map(([k, v]) => {
+                  if (k.startsWith("@sockt/") && typeof v === "string" && v.startsWith("workspace:")) {
+                    return [k, `^${ver}`];
+                  }
+                  return [k, v];
+                })
+              ) : dep;
+              pkg.dependencies = rewrite(pkg.dependencies);
+              pkg.peerDependencies = rewrite(pkg.peerDependencies);
+              pkg.devDependencies = rewrite(pkg.devDependencies);
+              fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+            ' "$pkg" "$VER"
+          done
+
+      - name: Bump Rust sockt-cli version
+        if: steps.skip.outputs.skipped != 'true'
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          cargo set-version --workspace "$VER" --manifest-path rust/Cargo.toml
+          cargo update --workspace --manifest-path rust/Cargo.toml
+
+      - name: Refresh bun.lock
+        if: steps.skip.outputs.skipped != 'true'
+        run: bun install
+
+      - name: Commit & push bump
+        if: steps.skip.outputs.skipped != 'true'
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): bump @sockt/* & sockt-cli to v${VER} [skip ci]"
+          if ! git push origin main; then
+            echo "::error::Failed to push bump commit to main. If main is protected, configure a BUMPER_TOKEN secret (PAT with push access) and ensure required status checks allow bot pushes."
+            exit 1
+          fi
+          echo "Pushed bump commit to main."
+
+  verify:
+    name: Verify & Build
+    needs: bump
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate schemas
+        run: bun run generate-schemas
+
+      - name: Ensure schemas are committed
+        run: |
+          if ! git diff --exit-code -- schemas/; then
+            echo "::error::Generated schemas differ from committed ones. Run 'bun run generate-schemas' and commit the result."
+            git diff -- schemas/
+            exit 1
+          fi
+
+      - name: Lint
+        run: bun run lint
+        continue-on-error: true
+
+      - name: Test
+        run: bun test
+
+      - name: Build all public packages
+        run: bun run build
+
+      - name: Resolve release version
+        id: meta
+        run: |
+          VER="${{ needs.bump.outputs.version }}"
+          echo "Resolved version: $VER"
+          [ -z "$VER" ] && { echo "::error::No version resolved"; exit 1; }
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+  publish-npm:
+    name: Publish @sockt/* to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node for npm publish (provenance)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure npm auth
+        run: |
+          printf "//registry.npmjs.org/:_authToken=%s\n" "${NPM_TOKEN}" >> ~/.npmrc
+          npm config set provenance true
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all public packages
+        run: bun run build
+
+      - name: "Set version & rewrite workspace: deps"
+        run: |
+          VER="${{ needs.verify.outputs.version }}"
+          echo "Releasing version: $VER"
+          PACKAGES=(types fsm memory runtime orch cadvp)
+          for p in "${PACKAGES[@]}"; do
+            pkg="packages/$p/package.json"
+            # bump own version
+            npm version "$VER" --no-git-tag-version --prefix "packages/$p"
+            # rewrite workspace: protocol deps to the released version
+            # supports forms: "workspace:*", "workspace:^", "workspace:~"
+            node -e '
+              const fs = require("fs");
+              const path = process.argv[1];
+              const ver = process.argv[2];
+              const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+              const rewrite = (dep) => dep ? Object.fromEntries(
+                Object.entries(dep).map(([k, v]) => {
+                  if (k.startsWith("@sockt/") && typeof v === "string" && v.startsWith("workspace:")) {
+                    return [k, `^${ver}`];
+                  }
+                  return [k, v];
+                })
+              ) : dep;
+              pkg.dependencies = rewrite(pkg.dependencies);
+              pkg.peerDependencies = rewrite(pkg.peerDependencies);
+              pkg.devDependencies = rewrite(pkg.devDependencies);
+              fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+            ' "$pkg" "$VER"
+          done
+
+      - name: Publish packages to npm
+        run: |
+          PACKAGES=(types fsm memory runtime orch cadvp)
+          for p in "${PACKAGES[@]}"; do
+            echo "::group::Publish @sockt/$p"
+            ( cd "packages/$p" && npm publish --access public --provenance )
+            echo "::endgroup::"
+          done
+
+  build-cli:
+    name: Build CLI (${{ matrix.artifact }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: sockt-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact: sockt-linux-aarch64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: sockt-darwin-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: sockt-darwin-arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << EOF
+          [target.aarch64-unknown-linux-musl]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: rust/target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        working-directory: rust
+
+      - name: Strip binary
+        if: ${{ !contains(matrix.target, 'windows') }}
+        run: |
+          cd rust/target/${{ matrix.target }}/release
+          strip sockt || true
+
+      - name: Package
+        run: |
+          cd rust/target/${{ matrix.target }}/release
+          tar czf ${{ matrix.artifact }}.tar.gz sockt
+          ls -lh ${{ matrix.artifact }}.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rust/target/${{ matrix.target }}/release/${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [verify, publish-npm, build-cli]
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          set -e
+          VER="${{ needs.verify.outputs.version }}"
+          mkdir -p release
+          cp artifacts/*/*.tar.gz release/
+          # SHA256SUMS
+          ( cd release && find . -name "*.tar.gz" -exec sha256sum {} \; | sed 's|\./||' | sort > SHA256SUMS )
+          # Schemas zip (committed JSON schemas for cloud-repo consumers)
+          if [ -d schemas ]; then
+            ( cd schemas && zip -r "$GITHUB_WORKSPACE/release/schemas-v${VER}.zip" . )
+          fi
+          # install.sh (curl|bash entrypoint)
+          if [ -f install.sh ]; then
+            cp install.sh release/
+          fi
+          echo "Release contents:"
+          ls -lh release/
+          cat release/SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}
+          fail_on_unmatched_files: true
+          name: v${{ needs.verify.outputs.version }}
+          tag_name: v${{ needs.verify.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### Release v${{ needs.verify.outputs.version }} published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifacts:" >> "$GITHUB_STEP_SUMMARY"
+          ( cd release && for f in *; do echo "* \`$f\`"; done ) >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Checksums:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat release/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
