@@ -74,6 +74,7 @@ rust/
 git clone https://github.com/sockt-dev/sockt
 cd sockt
 bun install
+cp .env.example .env   # fill in MODEL_API_KEY — see docs/CONFIGURATION.md
 
 # 2. Build the CLI
 cd rust/sockt-cli
@@ -226,17 +227,34 @@ Agents escalate tasks that exceed budget or require authorisation. Operators rev
 
 ---
 
+## Documentation
+
+| Doc | What's in it |
+| --- | --- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the packages fit together, the task FSM, the agent execution loop, the memory pipeline |
+| [docs/API.md](docs/API.md) | Full orchestrator HTTP API reference |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every environment variable, what reads it, and Groq free-tier tuning |
+| [docs/DEPARTMENTS.md](docs/DEPARTMENTS.md) | The skill index pattern, `.skill` file format, adding a department |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, conventions, test commands, PR process |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting, sandbox model, known security boundaries |
+
+---
+
 ## Development
 
 ```bash
 bun install                    # install all TS deps
-bun test                       # run all 655 TS tests
+cp .env.example .env           # configure — see docs/CONFIGURATION.md
+bun test                       # run all TS tests
 bun run generate-schemas       # regenerate JSON schemas from types
 
 cd rust/sockt-cli
 cargo build                    # build CLI (debug)
 cargo build --release          # build CLI (release)
+cargo test                     # run CLI test suite
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow.
 
 ---
 
@@ -244,3 +262,7 @@ cargo build --release          # build CLI (release)
 
 [Functional Source License 1.1 with MIT Future License](LICENSE.md).
 Non-competing use is permitted immediately. Converts to MIT automatically 2 years after each release.
+
+---
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
