@@ -19,14 +19,15 @@
     },
     "packages/cadvp": {
       "name": "@sockt/cadvp",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
-        "@sockt/types": "workspace:*",
+        "@sockt/memory": "^0.1.0",
+        "@sockt/types": "^0.1.0",
       },
     },
     "packages/fsm": {
       "name": "@sockt/fsm",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@sockt/types": "workspace:*",
         "uuid": "latest",
@@ -41,14 +42,14 @@
     },
     "packages/memory": {
       "name": "@sockt/memory",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
-        "@sockt/types": "workspace:*",
+        "@sockt/types": "^0.1.0",
       },
     },
     "packages/orch": {
       "name": "@sockt/orch",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@sockt/fsm": "workspace:*",
         "@sockt/types": "workspace:*",
@@ -61,7 +62,7 @@
     },
     "packages/runtime": {
       "name": "@sockt/runtime",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@ai-sdk/amazon-bedrock": "^1.0",
         "@ai-sdk/anthropic": "^1.0",
@@ -73,7 +74,7 @@
     },
     "packages/types": {
       "name": "@sockt/types",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "peerDependencies": {
         "zod": ">=4",
       },

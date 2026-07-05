@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "^0.1.0"
+    "@sockt/types": "^0.1.0",
+    "@sockt/memory": "^0.1.0"
   }
 }
