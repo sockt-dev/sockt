@@ -15,7 +15,57 @@
           ]
         },
         "content": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "image",
+                      "audio",
+                      "document",
+                      "video"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "imageUrl": {
+                    "type": "string"
+                  },
+                  "imageBase64": {
+                    "type": "string"
+                  },
+                  "audioUrl": {
+                    "type": "string"
+                  },
+                  "audioBase64": {
+                    "type": "string"
+                  },
+                  "documentUrl": {
+                    "type": "string"
+                  },
+                  "documentBase64": {
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ]
         },
         "toolCalls": {
           "type": "array",
@@ -46,6 +96,9 @@
         },
         "toolCallId": {
           "type": "string"
+        },
+        "name": {
+          "type": "string"
         }
       },
       "required": [
@@ -68,6 +121,21 @@
           "maximum": 9007199254740991
         },
         "totalTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cacheReadInputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cacheWriteInputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reasoningTokens": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991

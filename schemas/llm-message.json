@@ -12,7 +12,57 @@
       ]
     },
     "content": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "audio",
+                  "document",
+                  "video"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "imageUrl": {
+                "type": "string"
+              },
+              "imageBase64": {
+                "type": "string"
+              },
+              "audioUrl": {
+                "type": "string"
+              },
+              "audioBase64": {
+                "type": "string"
+              },
+              "documentUrl": {
+                "type": "string"
+              },
+              "documentBase64": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
     },
     "toolCalls": {
       "type": "array",
@@ -42,6 +92,9 @@
       }
     },
     "toolCallId": {
+      "type": "string"
+    },
+    "name": {
       "type": "string"
     }
   },
