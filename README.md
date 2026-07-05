@@ -71,7 +71,7 @@ rust/
 
 ```bash
 # 1. Clone and install dependencies
-git clone https://github.com/aliaankhowaja/sockt
+git clone https://github.com/sockt-dev/sockt
 cd sockt
 bun install
 

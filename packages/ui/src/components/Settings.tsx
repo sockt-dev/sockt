@@ -152,7 +152,7 @@ export default function Settings() {
           </p>
           <div className="divider" />
           <div className="row" style={{ gap: 16, fontSize: 12, fontFamily: "'Fira Code', monospace" }}>
-            <a href="https://github.com/aliaankhowaja/sockt" target="_blank" rel="noreferrer"
+            <a href="https://github.com/sockt-dev/sockt" target="_blank" rel="noreferrer"
                style={{ color: "var(--accent-blue)", textDecoration: "none" }}>
               github →
             </a>
