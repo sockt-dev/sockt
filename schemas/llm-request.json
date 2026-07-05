@@ -121,7 +121,8 @@
             "google",
             "ollama",
             "bedrock",
-            "openrouter"
+            "openrouter",
+            "groq"
           ]
         },
         "model": {

@@ -36,7 +36,7 @@ export async function reflectPhase(
     ctx.messages[0], // system prompt only
     { role: "user" as const, content: summaryMessage },
     { role: "user" as const, content: REFLECT_INSTRUCTION },
-  ];
+  ].filter((m): m is NonNullable<typeof m> => m !== undefined);
 
   const response = await llmClient.chat({
     messages: reflectMessages,

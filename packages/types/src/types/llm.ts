@@ -5,6 +5,7 @@ export const LlmProvider = {
   Ollama: "ollama",
   Bedrock: "bedrock",
   OpenRouter: "openrouter",
+  Groq: "groq",
 } as const;
 export type LlmProvider = (typeof LlmProvider)[keyof typeof LlmProvider];
 export const LLM_PROVIDER_VALUES = Object.values(LlmProvider) as [LlmProvider, ...LlmProvider[]];

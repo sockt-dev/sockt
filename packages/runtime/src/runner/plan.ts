@@ -27,7 +27,7 @@ export async function planPhase(
     ? [ctx.messages[0], ...ctx.messages.slice(-contextLimit)]
     : ctx.messages.slice(0, 1); // system prompt only by default (token-efficient)
   const planMessages = [
-    ...planHistory,
+    ...planHistory.filter((m): m is NonNullable<typeof m> => m !== undefined),
     { role: "user" as const, content: buildPlanInstruction(stepsAllowed) },
   ];
 

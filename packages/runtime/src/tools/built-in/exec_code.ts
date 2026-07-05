@@ -80,6 +80,7 @@ async function execInSbx(
 
   if (!exists) {
     await sbx.create({
+      image: "shell",
       agentId: name,
       tenantId: "exec",
       envVars: {},
