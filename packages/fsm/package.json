@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "^0.1.0",
+    "@sockt/types": "workspace:*",
     "uuid": "latest"
   }
 }

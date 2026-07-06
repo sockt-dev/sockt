@@ -20,8 +20,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "^0.1.0",
-    "@sockt/fsm": "^0.1.0",
+    "@sockt/types": "workspace:*",
+    "@sockt/fsm": "workspace:*",
     "hono": "^4.6",
     "node-cron": "^3.0"
   },
