@@ -16,12 +16,6 @@ on:
         type: boolean
         default: true
 
-# Secrets required in repo:
-#   NPM_TOKEN   — automation token with publish rights for @sockt scope
-#   BUMPER_TOKEN (optional) — PAT with push access to main, used to commit version bumps.
-#                              Falls back to the default GITHUB_TOKEN if not set. If main
-#                              has branch protection requiring review, you MUST supply this.
-
 permissions:
   contents: read
 
@@ -208,21 +202,6 @@ jobs:
 
       - name: Update npm to latest
         run: npm install -g npm@latest
-
-      - name: Configure npm auth
-        run: |
-          printf "//registry.npmjs.org/:_authToken=%s\n" "${NPM_TOKEN}" >> ~/.npmrc
-          npm config set provenance true
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Verify npm auth & scope access (debug)
-        run: |
-          echo "npm version: $(npm --version)"
-          echo "Authenticated as:"
-          npm whoami --registry=https://registry.npmjs.org
-          echo "Packages/orgs visible to this token for @sockt scope:"
-          npm access ls-packages @sockt --registry=https://registry.npmjs.org || echo "(no packages yet under @sockt — expected for first publish)"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
