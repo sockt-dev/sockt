@@ -216,6 +216,14 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Verify npm auth & scope access (debug)
+        run: |
+          echo "npm version: $(npm --version)"
+          echo "Authenticated as:"
+          npm whoami --registry=https://registry.npmjs.org
+          echo "Packages/orgs visible to this token for @sockt scope:"
+          npm access ls-packages @sockt --registry=https://registry.npmjs.org || echo "(no packages yet under @sockt — expected for first publish)"
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -260,7 +268,7 @@ jobs:
           PACKAGES=(types fsm memory runtime orch cadvp)
           for p in "${PACKAGES[@]}"; do
             echo "::group::Publish @sockt/$p"
-            ( cd "packages/$p" && npm publish --access public --provenance )
+            ( cd "packages/$p" && npm publish --access public --provenance --loglevel verbose )
             echo "::endgroup::"
           done
 
