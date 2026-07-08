@@ -245,9 +245,14 @@ jobs:
       - name: Publish packages to npm
         run: |
           PACKAGES=(types fsm memory runtime orch cadvp)
+          VER="${{ needs.verify.outputs.version }}"
           for p in "${PACKAGES[@]}"; do
             echo "::group::Publish @sockt/$p"
-            ( cd "packages/$p" && npm publish --access public --provenance --loglevel verbose )
+            if npm view "@sockt/$p@$VER" version >/dev/null 2>&1; then
+              echo "@sockt/$p@$VER already published — skipping."
+            else
+              ( cd "packages/$p" && npm publish --access public --provenance --loglevel verbose )
+            fi
             echo "::endgroup::"
           done
 
