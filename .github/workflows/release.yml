@@ -265,7 +265,7 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             artifact: sockt-linux-aarch64
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             artifact: sockt-darwin-x86_64
           - os: macos-14
