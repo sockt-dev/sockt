@@ -182,6 +182,20 @@ fn decrypt_api_key(config: &SocktConfig) -> Option<String> {
     }
 }
 
+/// Decrypts the Slack app + bot tokens if `sockt setup slack` has configured them.
+/// Returns None if either token is unset (empty ciphertext) so callers can skip
+/// enabling the Slack bridge entirely rather than starting it with blank tokens.
+fn decrypt_slack_tokens(config: &SocktConfig) -> Option<(String, String)> {
+    if config.slack.app_token.ciphertext.is_empty() || config.slack.bot_token.ciphertext.is_empty() {
+        return None;
+    }
+    let km = KeyManager::new(KeyManager::default_path());
+    let identity = km.load().ok()?;
+    let app_token = crypto::decrypt(&config.slack.app_token, &identity).ok()?;
+    let bot_token = crypto::decrypt(&config.slack.bot_token, &identity).ok()?;
+    Some((app_token, bot_token))
+}
+
 fn create_gbrain_config(monorepo: &PathBuf, config: &SocktConfig) -> ServiceConfig {
     let gbrain_dir = if config.gbrain.directory.is_relative() {
         monorepo.join(&config.gbrain.directory)
@@ -233,6 +247,10 @@ fn create_orch_config(monorepo: &PathBuf, config: &SocktConfig) -> Result<Servic
     }
     if let Some(ref base_url) = config.models.base_url {
         env_vars.insert("MODEL_BASE_URL".to_string(), base_url.clone());
+    }
+    if let Some((app_token, bot_token)) = decrypt_slack_tokens(config) {
+        env_vars.insert("SLACK_APP_TOKEN".to_string(), app_token);
+        env_vars.insert("SLACK_BOT_TOKEN".to_string(), bot_token);
     }
 
     Ok(ServiceConfig {
@@ -438,6 +456,13 @@ fn run_dry_run(config: &SocktConfig, department: Option<&str>) -> Result<()> {
         services.len(),
         est_memory_mb
     );
+
+    if decrypt_slack_tokens(config).is_some() {
+        println!("  Slack: enabled (Socket Mode via orch)");
+    } else {
+        println!("  Slack: not configured — run `sockt setup slack` to enable");
+    }
+
     println!("  Run without --dry-run to deploy.\n");
 
     Ok(())

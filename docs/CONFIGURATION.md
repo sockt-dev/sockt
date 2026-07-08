@@ -32,6 +32,10 @@ variables automatically when it spawns services via `sockt deploy`.
 | `DEPLOYMENT_ID` | `default` | orch, runtime | Tenant ID — all tasks/agents are scoped to this |
 | `PORT` | `3100` (orch) / `3001` (ui) | orch, ui | HTTP port to bind |
 | `DB_PATH` | `./sockt.db` | orch | SQLite file path for the task store |
+| `SLACK_APP_TOKEN` | — | orch | Slack app-level token (`xapp-...`). Set both this and `SLACK_BOT_TOKEN` to enable the Slack bridge (`@sockt/slack-gateway`) — orch opens a Socket Mode connection on startup. See [ARCHITECTURE.md#slack-bridge](ARCHITECTURE.md#slack-bridge) |
+| `SLACK_BOT_TOKEN` | — | orch | Slack bot token (`xoxb-...`), used for `chat.postMessage`/`conversations.list` |
+
+`sockt deploy` sets both automatically once `sockt setup slack` has stored encrypted tokens — you don't need to set these by hand if you're using the CLI-managed workflow. They're only for running `orch/src/serve.ts` directly during development.
 
 ---
 

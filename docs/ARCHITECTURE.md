@@ -57,17 +57,18 @@ Everything below `Services` can also be run directly with `bun run
 packages/<pkg>/src/serve.ts` for local development — the CLI is a convenience
 wrapper that manages process lifecycle, health checks, and encrypted config.
 
-## The Six TypeScript Packages
+## The TypeScript Packages
 
 | Package | Responsibility | Depends on |
 |---|---|---|
 | `@sockt/types` | Shared Zod schemas, TS interfaces, error classes | — (root of the dependency graph) |
 | `@sockt/fsm` | Task state machine, SQLite store, budget guard | `types` |
 | `@sockt/memory` | Vector search, dedup, MCP brain client | `types` |
-| `@sockt/orch` | Orchestrator HTTP API, agent registry, department templates | `types`, `fsm` |
+| `@sockt/orch` | Orchestrator HTTP API, agent registry, department templates | `types`, `fsm`, `slack-gateway` |
 | `@sockt/runtime` | Agent execution loop, built-in tools, LLM client | `types` |
 | `@sockt/cadvp` | JSONL tail daemon, event dedup, memory ingestion | `types`, `memory` |
 | `@sockt/gbrain-mcp` | Local MCP memory server | `types` |
+| `@sockt/slack-gateway` | `ChannelGateway` implementation over Slack Socket Mode | `types` |
 | `@sockt/ui` | React control-plane dashboard | (calls orch over HTTP, no direct import) |
 
 `types` is the only package every other package depends on. No package
@@ -181,6 +182,49 @@ reference: [docs/API.md](API.md). Key groups:
 The orchestrator has **no built-in authentication** — see
 [SECURITY.md](../SECURITY.md#5-the-orchestrator-api-has-no-authentication-by-default)
 before exposing it beyond localhost.
+
+## Slack Bridge
+
+`@sockt/types` defines a `ChannelGateway` interface (`onMessage`, `send`,
+`listChannels`, `disconnect`) that `Orchestrator` will wire up if you pass
+one into its config. `@sockt/slack-gateway` is the implementation, backed
+by Slack's Socket Mode API:
+
+```mermaid
+sequenceDiagram
+    participant Slack
+    participant Gateway as SlackChannelGateway
+    participant Orch as Orchestrator
+    participant Reply as SlackReplyTelemetry
+
+    Slack->>Gateway: message / app_mention event (WebSocket)
+    Gateway->>Slack: ack envelope (within 3s)
+    Gateway->>Orch: handleMessage(InboundMessage)
+    Orch->>Orch: MessageRouter routes to agent, creates Task
+    Orch->>Reply: emit task_created (channelId, threadId, platform)
+    Note over Reply: correlates taskId -> Slack destination in memory
+    Note over Orch: runtime worker claims + executes task normally
+    Orch->>Reply: emit task_completed / task_escalated (taskId)
+    Reply->>Slack: chat.postMessage (threaded reply)
+```
+
+Key points:
+
+- **Inbound** goes over an outbound-only WebSocket (Socket Mode) — no public
+  HTTP endpoint or ingress required
+- **Outbound** replies use Slack's normal Web API (`chat.postMessage`) —
+  Socket Mode is receive-only
+- The task → Slack-destination correlation lives in `SlackReplyTelemetry`,
+  in memory, keyed by `taskId`. It's populated from the `task_created`
+  telemetry event's `data.channelId`/`data.threadId`/`data.platform` fields
+  (set in `Orchestrator.handleMessage`) and consumed on `task_completed`/
+  `task_escalated`. If the orchestrator restarts mid-task, that task still
+  completes normally — it just won't get a Slack reply, since the
+  correlation isn't persisted
+- Enabled automatically by `sockt deploy` once `sockt setup slack` has
+  stored encrypted tokens (`~/.sockt/config.yaml`) — see
+  [CONFIGURATION.md](CONFIGURATION.md) for the `SLACK_APP_TOKEN`/
+  `SLACK_BOT_TOKEN` env vars this resolves to
 
 ## Departments & Multi-Agent Coordination
 

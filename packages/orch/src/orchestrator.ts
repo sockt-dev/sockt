@@ -108,14 +108,24 @@ export class Orchestrator {
   async handleMessage(message: InboundMessage): Promise<void> {
     const agents = this.router.route(message);
     for (const agent of agents) {
-      await this.store.create({
+      const created = await this.store.create({
         tenantId: message.tenantId,
         description: message.content,
       });
+      // channelId/threadId/platform let a telemetry consumer (e.g. the Slack
+      // reply bridge in serve.ts) correlate this task back to where the
+      // triggering message came from, so completion can be replied to.
       this.config.telemetry?.emit({
         type: "task_created",
+        taskId: created.id,
         tenantId: message.tenantId,
-        data: { agentId: agent.id, source: "message" },
+        data: {
+          agentId: agent.id,
+          source: "message",
+          platform: message.platform,
+          channelId: message.channelId,
+          threadId: message.threadId,
+        },
       });
     }
   }

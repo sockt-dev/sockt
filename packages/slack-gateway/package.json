@@ -1,5 +1,5 @@
 {
-  "name": "@sockt/orch",
+  "name": "@sockt/slack-gateway",
   "version": "0.1.0",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE.md",
@@ -22,18 +22,11 @@
     "url": "https://github.com/sockt-dev/sockt.git"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* --external hono --external node-cron && tsc --project tsconfig.build.json",
+    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sockt/types": "workspace:*",
-    "@sockt/fsm": "workspace:*",
-    "@sockt/slack-gateway": "workspace:*",
-    "hono": "^4.6",
-    "node-cron": "^3.0"
-  },
-  "devDependencies": {
-    "@types/node-cron": "^3.0"
+    "@sockt/types": "workspace:*"
   }
 }

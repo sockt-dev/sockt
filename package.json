@@ -6,7 +6,7 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "build": "bun run --filter '@sockt/types' build && bun run --filter '@sockt/fsm' build && bun run --filter '@sockt/memory' build && bun run --filter '@sockt/runtime' build && bun run --filter '@sockt/orch' build && bun run --filter '@sockt/cadvp' build",
+    "build": "bun run --filter '@sockt/types' build && bun run --filter '@sockt/fsm' build && bun run --filter '@sockt/memory' build && bun run --filter '@sockt/slack-gateway' build && bun run --filter '@sockt/runtime' build && bun run --filter '@sockt/orch' build && bun run --filter '@sockt/cadvp' build",
     "test": "bun test",
     "lint": "eslint packages/*/src",
     "generate-schemas": "bun run packages/types/scripts/generate-schemas.ts",

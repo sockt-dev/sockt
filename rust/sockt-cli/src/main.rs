@@ -8,7 +8,6 @@ mod gbrain;
 mod logs;
 mod orch_client;
 mod runtime;
-mod socket_mode;
 mod tui;
 mod upgrade;
 

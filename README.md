@@ -20,20 +20,21 @@ Sockt solves these with a budget-enforced finite state machine for task coordina
 
 ## Architecture
 
-Sockt is a TypeScript monorepo (Bun runtime) with six core packages, a GBrain MCP memory server, and a Rust CLI:
+Sockt is a TypeScript monorepo (Bun runtime) with several core packages, a GBrain MCP memory server, and a Rust CLI:
 
 ```text
 packages/
-  types/      — shared Zod schemas, interfaces, and error classes
-  fsm/        — SQLite-backed task state machine with LLM call budget guard
-  memory/     — vector search, reciprocal rank fusion, dedup, MCP brain client
-  orch/       — orchestrator HTTP API, agent registry, scheduler, message router
-  runtime/    — per-agent execution loop: Plan → Act → Observe → Reflect
-  cadvp/      — JSONL tail daemon for async memory ingestion and event processing
-  gbrain-mcp/ — local MCP memory server (SQLite-backed knowledge store)
-  ui/         — local control-plane dashboard (React, Bun.serve)
+  types/         — shared Zod schemas, interfaces, and error classes
+  fsm/           — SQLite-backed task state machine with LLM call budget guard
+  memory/        — vector search, reciprocal rank fusion, dedup, MCP brain client
+  orch/          — orchestrator HTTP API, agent registry, scheduler, message router
+  runtime/       — per-agent execution loop: Plan → Act → Observe → Reflect
+  cadvp/         — JSONL tail daemon for async memory ingestion and event processing
+  gbrain-mcp/    — local MCP memory server (SQLite-backed knowledge store)
+  slack-gateway/ — Slack Socket Mode bridge (ChannelGateway implementation)
+  ui/            — local control-plane dashboard (React, Bun.serve)
 rust/
-  sockt-cli/  — CLI binary (`sockt`) for deployment and operations
+  sockt-cli/     — CLI binary (`sockt`) for deployment and operations
 ```
 
 ### How It Works
@@ -172,6 +173,10 @@ Continuous monitoring daemon. Tails JSONL execution logs, validates and deduplic
 ### `@sockt/gbrain-mcp`
 
 Local MCP memory server. Exposes a SQLite-backed knowledge store over HTTP for agents and CADVP to read/write without needing a cloud service.
+
+### `@sockt/slack-gateway`
+
+`ChannelGateway` implementation over Slack's Socket Mode API — receives messages via an outbound-only WebSocket (no public endpoint needed), routes them into tasks, and replies in-thread when the task completes. Enabled automatically by `sockt deploy` once `sockt setup slack` has stored your app/bot tokens.
 
 ### `@sockt/ui`
 

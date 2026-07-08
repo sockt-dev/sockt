@@ -52,6 +52,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@sockt/fsm": "workspace:*",
+        "@sockt/slack-gateway": "workspace:*",
         "@sockt/types": "workspace:*",
         "hono": "^4.6",
         "node-cron": "^3.0",
@@ -70,6 +71,13 @@
         "@ai-sdk/openai": "^1.0",
         "@sockt/types": "workspace:*",
         "ai": "^4.0",
+      },
+    },
+    "packages/slack-gateway": {
+      "name": "@sockt/slack-gateway",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sockt/types": "workspace:*",
       },
     },
     "packages/types": {
@@ -200,6 +208,8 @@
     "@sockt/orch": ["@sockt/orch@workspace:packages/orch"],
 
     "@sockt/runtime": ["@sockt/runtime@workspace:packages/runtime"],
+
+    "@sockt/slack-gateway": ["@sockt/slack-gateway@workspace:packages/slack-gateway"],
 
     "@sockt/types": ["@sockt/types@workspace:packages/types"],
 
