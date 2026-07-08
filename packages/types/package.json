@@ -17,6 +17,10 @@
     "LICENSE.md",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sockt-dev/sockt.git"
+  },
   "scripts": {
     "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external zod && tsc --project tsconfig.build.json",
     "test": "bun test",
