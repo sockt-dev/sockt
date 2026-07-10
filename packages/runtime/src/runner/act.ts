@@ -1,10 +1,11 @@
-import type { LlmClient } from "@sockt/types";
+import type { LlmClient, TokenUsage } from "@sockt/types";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { ExecutionContext, PlanStep, ToolExecutionResult } from "../types.ts";
 
 export interface ActResult {
   toolResult?: ToolExecutionResult;
   llmOutput?: string;
+  tokenUsage?: TokenUsage;
 }
 
 export async function actPhase(
@@ -42,5 +43,5 @@ export async function actPhase(
   ctx.messages.push(response.message);
 
   const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);
-  return { llmOutput: contentStr };
+  return { llmOutput: contentStr, tokenUsage: response.usage };
 }

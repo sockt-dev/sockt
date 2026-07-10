@@ -1,3 +1,5 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { AgentConfig, LlmConfig, LlmRequest, ModelSelector, ModelSelectionContext, Task } from "@sockt/types";
 import { HttpOrchClient } from "../orch-client/client.ts";
 import { SkillCompiler } from "../skills/compiler.ts";
@@ -22,6 +24,7 @@ export class AgentRunner {
   private readonly reflectionEnabled: boolean;
   private readonly config: AgentRunnerConfig;
   private readonly runningTasks = new Map<string, AbortController>();
+  private readonly runningContexts = new Map<string, ExecutionContext>();
 
   constructor(config: AgentRunnerConfig) {
     this.config = config;
@@ -34,11 +37,19 @@ export class AgentRunner {
   async executeTask(agent: AgentConfig, task: Task): Promise<TaskOutcome> {
     const controller = new AbortController();
     this.runningTasks.set(task.id, controller);
+    const ctx = buildExecutionContext(agent, task, controller.signal);
+    this.runningContexts.set(task.id, ctx);
 
     try {
-      return await this.runLoop(agent, task, controller.signal);
+      const outcome = await this.runLoop(ctx);
+      if (!ctx.trace.getOutcome()) ctx.trace.setOutcome(outcome);
+      return outcome;
     } finally {
       this.runningTasks.delete(task.id);
+      this.runningContexts.delete(task.id);
+      await this.persistTrace(ctx).catch((e) => {
+        console.error(`[runtime] failed to persist trace for task=${task.id}:`, e);
+      });
     }
   }
 
@@ -51,11 +62,24 @@ export class AgentRunner {
   }
 
   getState(taskId: string): ExecutionContext | null {
-    return null;
+    return this.runningContexts.get(taskId) ?? null;
   }
 
-  private async runLoop(agent: AgentConfig, task: Task, signal: AbortSignal): Promise<TaskOutcome> {
-    const ctx = buildExecutionContext(agent, task, signal);
+  private async persistTrace(ctx: ExecutionContext): Promise<void> {
+    if (!this.config.traceLogPath) return;
+    await mkdir(dirname(this.config.traceLogPath), { recursive: true });
+    const record = {
+      taskId: ctx.task.id,
+      tenantId: ctx.task.tenantId,
+      agentId: ctx.agent.id,
+      department: ctx.agent.department,
+      ...ctx.trace.toJSON(),
+    };
+    await appendFile(this.config.traceLogPath, JSON.stringify(record) + "\n", "utf-8");
+  }
+
+  private async runLoop(ctx: ExecutionContext): Promise<TaskOutcome> {
+    const { agent, task, signal } = ctx;
 
     if (this.skillCompiler) {
       const skills = await this.skillCompiler.findRelevant(task.description, 3);
@@ -73,6 +97,7 @@ export class AgentRunner {
         phase: "plan",
         action: "generate_plan",
         output: plan,
+        tokenUsage: plan.tokenUsage,
         durationMs: 0,
         timestamp: new Date().toISOString(),
       });
@@ -106,6 +131,7 @@ export class AgentRunner {
           action: step.description,
           toolCall: step.tool ? { id: `call-${Date.now()}`, name: step.tool, arguments: step.args ?? {} } : undefined,
           output: actionResult.toolResult?.output ?? actionResult.llmOutput,
+          tokenUsage: actionResult.tokenUsage,
           durationMs: performance.now() - actStart,
           timestamp: new Date().toISOString(),
         });
@@ -146,6 +172,7 @@ export class AgentRunner {
         phase: "reflect",
         action: "reflect",
         output: reflection,
+        tokenUsage: reflection.tokenUsage,
         durationMs: 0,
         timestamp: new Date().toISOString(),
       });

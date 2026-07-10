@@ -42,7 +42,7 @@ export async function planPhase(
   const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);
   const plan = parsePlanResponse(contentStr, maxSteps);
 
-  return plan;
+  return { ...plan, tokenUsage: response.usage };
 }
 
 function parsePlanResponse(content: string, maxSteps: number): PlanResult {

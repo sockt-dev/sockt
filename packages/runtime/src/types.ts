@@ -41,6 +41,8 @@ export interface AgentRunnerConfig {
   skillsDir?: string;
   maxPlanSteps?: number;
   reflectionEnabled?: boolean;
+  /** Append-only JSONL path — one line per finished task with the full ExecutionTrace. Unset = no persistence. */
+  traceLogPath?: string;
 }
 
 // ─── Docker Sandbox Config ───────────────────────────────────────────────────
@@ -105,6 +107,7 @@ export interface PlanStep {
 
 export interface PlanResult {
   steps: PlanStep[];
+  tokenUsage?: TokenUsage;
 }
 
 export interface ReflectionResult {
@@ -112,4 +115,5 @@ export interface ReflectionResult {
   output?: string;
   escalate?: boolean;
   reason?: string;
+  tokenUsage?: TokenUsage;
 }

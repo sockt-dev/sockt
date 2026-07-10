@@ -47,7 +47,7 @@ export async function reflectPhase(
   ctx.messages.push(response.message);
 
   const contentStr = typeof response.message.content === "string" ? response.message.content : JSON.stringify(response.message.content);
-  return parseReflectionResponse(contentStr);
+  return { ...parseReflectionResponse(contentStr), tokenUsage: response.usage };
 }
 
 function parseReflectionResponse(content: string): ReflectionResult {

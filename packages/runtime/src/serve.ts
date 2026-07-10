@@ -1,9 +1,16 @@
+import { homedir } from "node:os";
 import { AgentRunner } from "./runner/agent-runner.ts";
 import { HttpOrchClient } from "./orch-client/client.ts";
 import { HttpLlmClient } from "./llm/http-client.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { registerBuiltInTools } from "./tools/built-in/index.ts";
 import type { AgentConfig, LlmConfig } from "@sockt/types";
+
+// Neither Bun's .env loader nor node:fs expand a leading "~" — left unexpanded,
+// paths like "~/.sockt/scratch" resolve to a literal "~" directory relative to cwd.
+function expandHome(path: string): string {
+  return path.startsWith("~") ? path.replace(/^~/, homedir()) : path;
+}
 
 const orchUrl      = process.env.ORCH_URL       ?? "http://localhost:3100";
 const deploymentId = process.env.DEPLOYMENT_ID  ?? "default";
@@ -51,11 +58,17 @@ const defaultSkillsDir = new URL(
 
 const skillsDir = process.env.SKILLS_DIR ?? defaultSkillsDir;
 
+// Full Plan/Act/Observe/Reflect execution trace, one JSONL line per finished task.
+// Set TRACE_LOG_PATH="" to disable. Consumed by evals/trace-capture.ts.
+const scratchDir = expandHome(process.env.SCRATCH_DIR ?? `${homedir()}/.sockt/scratch`);
+const traceLogPath = expandHome(process.env.TRACE_LOG_PATH ?? `${scratchDir}/traces.jsonl`);
+
 const runner = new AgentRunner({
   llmClient,
   toolRegistry,
   orchBaseUrl: orchUrl,
   skillsDir,
+  traceLogPath: traceLogPath || undefined,
 });
 
 // Self-register with orchestrator (retry until orch is ready)
