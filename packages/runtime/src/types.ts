@@ -44,6 +44,8 @@ export interface AgentRunnerConfig {
   reflectionEnabled?: boolean;
   /** Append-only JSONL path — one line per finished task with the full ExecutionTrace. Unset = no persistence. */
   traceLogPath?: string;
+  /** Passed to this runner's internal HttpOrchClient — see its apiToken doc. */
+  orchApiToken?: string;
 }
 
 // ─── Docker Sandbox Config ───────────────────────────────────────────────────

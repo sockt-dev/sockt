@@ -28,6 +28,8 @@ export interface OrchestratorConfig {
    * message via SlackHitlBridge, looking up the triggering task's channel via
    * its own TaskOriginStore (same db handle as this Orchestrator's). */
   onApprovalCreated?: (approval: StoredApproval) => void;
+  /** Passed straight through to OrchestratorApi — see its apiToken doc. */
+  apiToken?: string;
 }
 
 export interface RoutingConfig {
@@ -113,6 +115,7 @@ export class Orchestrator {
       telemetry: config.telemetry,
       onApprovalCreated: config.onApprovalCreated,
       taskOriginStore: this.taskOriginStore,
+      apiToken: config.apiToken,
     });
 
     if (config.channelGateway) {

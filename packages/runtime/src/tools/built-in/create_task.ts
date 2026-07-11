@@ -37,6 +37,7 @@ export const makeCreateTaskHandler = (
   tenantId: string,
   currentTaskId: { value?: string },
   createdByParent: Map<string, Set<string>>,
+  apiToken?: string,
 ): ToolHandler =>
   async (args) => {
     const description = String(args.description ?? "").trim();
@@ -61,9 +62,12 @@ export const makeCreateTaskHandler = (
       };
     }
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (apiToken) headers.Authorization = `Bearer ${apiToken}`;
+
     const res = await fetch(`${orchUrl}/tasks`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         tenantId,
         description,

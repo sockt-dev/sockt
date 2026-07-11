@@ -28,7 +28,7 @@ export class AgentRunner {
 
   constructor(config: AgentRunnerConfig) {
     this.config = config;
-    this.orchClient = new HttpOrchClient({ baseUrl: config.orchBaseUrl });
+    this.orchClient = new HttpOrchClient({ baseUrl: config.orchBaseUrl, apiToken: config.orchApiToken });
     this.skillCompiler = config.skillsDir ? new SkillCompiler(config.skillsDir) : null;
     this.maxPlanSteps = config.maxPlanSteps ?? 10;
     this.reflectionEnabled = config.reflectionEnabled ?? true;

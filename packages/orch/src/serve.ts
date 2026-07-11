@@ -85,6 +85,14 @@ const routing: RoutingConfig = {
     : [],
 };
 
+// Opt-in bearer auth (SECURITY.md #5) — unset by default, matching the
+// existing no-auth local-dev behavior. Every runtime worker talking to this
+// orch must be given the same token via its own ORCH_API_TOKEN env var.
+const apiToken = process.env.ORCH_API_TOKEN || undefined;
+if (!apiToken) {
+  console.warn("[orch] ORCH_API_TOKEN not set — API has no authentication (see SECURITY.md #5). Do not expose this port publicly.");
+}
+
 const orch = new Orchestrator({
   port,
   dbPath,
@@ -94,6 +102,7 @@ const orch = new Orchestrator({
   telemetry,
   routing,
   onApprovalCreated,
+  apiToken,
 });
 
 await orch.start();

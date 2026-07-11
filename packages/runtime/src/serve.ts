@@ -15,6 +15,9 @@ function expandHome(path: string): string {
 }
 
 const orchUrl      = process.env.ORCH_URL       ?? "http://localhost:3100";
+// Must match the orch process's own ORCH_API_TOKEN (see SECURITY.md #5) —
+// unset by default, matching orch's own no-auth-by-default behavior.
+const orchApiToken = process.env.ORCH_API_TOKEN || undefined;
 const deploymentId = process.env.DEPLOYMENT_ID  ?? "default";
 const agentRole    = (process.env.AGENT_ROLE    ?? "worker") as "worker" | "architect";
 const department   = process.env.DEPARTMENT     ?? "general";
@@ -62,8 +65,21 @@ if (maxConcurrent > 1) {
 const currentTaskId: { value?: string } = {};
 const createdByParent = new Map<string, Set<string>>();
 
+// Whether exec_code refuses to run rather than silently falling back to an
+// unsandboxed temp dir when sbx is unavailable. Defaults to true for engops
+// (same rationale as the exec_code approval gate below — approving a gated
+// exec_code call should mean the action is actually isolated, not just that
+// a human clicked a button). EXEC_CODE_REQUIRE_SANDBOX always overrides when
+// set (including "" to force-disable). Added in Phase 3 after finding sbx
+// wasn't actually installed on the dev machine despite being gated on —
+// every "approved" exec_code call had silently been running unsandboxed.
+const requireSandboxDefault = department === "engops";
+const requireSandbox = process.env.EXEC_CODE_REQUIRE_SANDBOX !== undefined
+  ? process.env.EXEC_CODE_REQUIRE_SANDBOX === "true"
+  : requireSandboxDefault;
+
 const toolRegistry = new ToolRegistry();
-registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, currentTaskId, createdByParent });
+registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, currentTaskId, createdByParent, requireSandbox, apiToken: orchApiToken });
 
 // Comma-separated tool names that require human approval before running,
 // e.g. "exec_code,http_request". APPROVAL_REQUIRED_TOOLS always wins when
@@ -84,10 +100,11 @@ if (approvalRequiredTools.length > 0) {
 const hitlGate = new HttpHitlGate({
   baseUrl: orchUrl,
   pollIntervalMs: Number(process.env.HITL_POLL_INTERVAL_MS ?? 2000),
+  apiToken: orchApiToken,
 });
 
 const llmClient = new HttpLlmClient(llmConfig);
-const orchClient = new HttpOrchClient({ baseUrl: orchUrl });
+const orchClient = new HttpOrchClient({ baseUrl: orchUrl, apiToken: orchApiToken });
 
 // Department-specific skills directory — SkillCompiler loads .skill JSON files from here
 // Defaults to the bundled department skills inside the monorepo
@@ -110,6 +127,7 @@ const runner = new AgentRunner({
   skillsDir,
   traceLogPath: traceLogPath || undefined,
   hitlGate,
+  orchApiToken,
 });
 
 // Self-register with orchestrator (retry until orch is ready)

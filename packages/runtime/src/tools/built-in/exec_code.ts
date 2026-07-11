@@ -10,6 +10,7 @@ import type { ToolHandler } from "../../types.ts";
 import { SbxSandbox, checkSbxAvailable } from "../../sandbox/sbx-sandbox.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdir, rm } from "node:fs/promises";
 
 export const execCodeDefinition: ToolDefinition = {
   name: "exec_code",
@@ -38,7 +39,7 @@ export const execCodeDefinition: ToolDefinition = {
   },
 };
 
-export const makeExecCodeHandler = (agentId: string): ToolHandler =>
+export const makeExecCodeHandler = (agentId: string, requireSandbox = false): ToolHandler =>
   async (args) => {
     const language    = String(args.language ?? "bash").toLowerCase();
     const code        = String(args.code ?? "");
@@ -54,6 +55,21 @@ export const makeExecCodeHandler = (agentId: string): ToolHandler =>
 
     if (sbxAvailable) {
       return execInSbx(code, cmd, ext, agentId, sandboxName, timeoutMs);
+    }
+
+    // requireSandbox refuses rather than silently degrading isolation. A
+    // human approving a gated exec_code call (APPROVAL_REQUIRED_TOOLS) is
+    // approving an *isolated* action — falling back to an unsandboxed temp
+    // dir here would make that approval mean something different than what
+    // was shown in the Slack approval message. Found 2026-07-12: sbx wasn't
+    // actually installed on the dev machine despite being gated on, so every
+    // "approved" exec_code call had silently been running unsandboxed.
+    if (requireSandbox) {
+      throw new Error(
+        "exec_code requires an isolated sandbox (sbx) and none is available — refusing to run " +
+        "unsandboxed. Run `sbx login` (after installing via winget/brew/apt) to enable it, or unset " +
+        "EXEC_CODE_REQUIRE_SANDBOX to allow the unsandboxed fallback.",
+      );
     }
 
     // Fallback: run in restricted temp dir (no microVM isolation)
@@ -121,6 +137,7 @@ async function execInTempDir(
   const dir      = join(tmpdir(), `sockt-exec-${Date.now()}`);
   const filepath = join(dir, `code.${ext}`);
 
+  await mkdir(dir, { recursive: true });
   await Bun.write(filepath, code);
 
   const proc = Bun.spawn([cmd, filepath], {
@@ -130,6 +147,10 @@ async function execInTempDir(
     env: {
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
+      // Windows has no HOME by default — some interpreters (Git Bash's bash,
+      // in particular) need it or fall back to a profile lookup that can
+      // fail. USERPROFILE is its Windows equivalent.
+      USERPROFILE: process.env.USERPROFILE ?? "",
       // Intentionally minimal env for safety
     },
   });
@@ -146,8 +167,12 @@ async function execInTempDir(
     }),
   ]);
 
-  // Clean up temp dir
-  await Bun.spawn(["rm", "-rf", dir], { stdout: "pipe", stderr: "pipe" }).exited.catch(() => {});
+  // Clean up temp dir. Was `Bun.spawn(["rm", "-rf", dir])` — depended on a
+  // POSIX `rm` binary being on PATH, which Bun.spawn (unlike a shell) won't
+  // resolve via any shell builtin, and which isn't guaranteed present on
+  // Windows even with Git installed unless its bin dir happens to be on
+  // PATH. node:fs/promises works identically on every platform Bun runs on.
+  await rm(dir, { recursive: true, force: true }).catch(() => {});
 
   return {
     exitCode,

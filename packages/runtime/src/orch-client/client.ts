@@ -5,17 +5,23 @@ export interface HttpOrchClientConfig {
   baseUrl: string;
   timeoutMs?: number;
   retries?: number;
+  /** Sent as `Authorization: Bearer <apiToken>` when set — must match the
+   * orch process's own ORCH_API_TOKEN (see OrchestratorApi's apiToken doc).
+   * Unset by default, matching orch's own no-auth-by-default behavior. */
+  apiToken?: string;
 }
 
 export class HttpOrchClient implements OrchClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly retries: number;
+  private readonly apiToken?: string;
 
   constructor(config: HttpOrchClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.timeoutMs = config.timeoutMs ?? 10_000;
     this.retries = config.retries ?? 2;
+    this.apiToken = config.apiToken;
   }
 
   async claim(taskId: string, agentId: string): Promise<Task> {
@@ -67,9 +73,13 @@ export class HttpOrchClient implements OrchClient {
 
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       try {
+        const headers: Record<string, string> = {};
+        if (body) headers["Content-Type"] = "application/json";
+        if (this.apiToken) headers.Authorization = `Bearer ${this.apiToken}`;
+
         const response = await fetch(`${this.baseUrl}${path}`, {
           method,
-          headers: body ? { "Content-Type": "application/json" } : undefined,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
           body: body ? JSON.stringify(body) : undefined,
           signal: AbortSignal.timeout(this.timeoutMs),
         });

@@ -4,6 +4,9 @@ import { SocktError } from "@sockt/types";
 export interface HttpHitlGateConfig {
   baseUrl: string;
   pollIntervalMs?: number;
+  /** Sent as `Authorization: Bearer <apiToken>` when set — see
+   * HttpOrchClientConfig.apiToken for the matching rationale. */
+  apiToken?: string;
 }
 
 interface ApprovalRecord {
@@ -20,10 +23,12 @@ interface ApprovalRecord {
 export class HttpHitlGate implements HitlGate {
   private readonly baseUrl: string;
   private readonly pollIntervalMs: number;
+  private readonly apiToken?: string;
 
   constructor(config: HttpHitlGateConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.pollIntervalMs = config.pollIntervalMs ?? 2000;
+    this.apiToken = config.apiToken;
   }
 
   async requestApproval(request: ApprovalRequest): Promise<string> {
@@ -86,9 +91,13 @@ export class HttpHitlGate implements HitlGate {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (body) headers["Content-Type"] = "application/json";
+    if (this.apiToken) headers.Authorization = `Bearer ${this.apiToken}`;
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
 

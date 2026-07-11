@@ -19,6 +19,17 @@ export interface BuiltInToolOptions {
    * re-plans within one execution don't re-create the same subtask. Caller
    * should clear the entry for a task id once that task finishes. */
   createdByParent: Map<string, Set<string>>;
+  /** When true, exec_code refuses to run (throws) instead of silently
+   * falling back to an unsandboxed temp dir when sbx is unavailable. A human
+   * approving a gated exec_code call (see APPROVAL_REQUIRED_TOOLS) is
+   * approving an *isolated* action — falling back silently would make that
+   * approval mean less than it looks like. See EXEC_CODE_REQUIRE_SANDBOX in
+   * serve.ts. */
+  requireSandbox?: boolean;
+  /** Sent as `Authorization: Bearer <apiToken>` by create_task's direct
+   * fetch to orch — see HttpOrchClientConfig.apiToken for the matching
+   * rationale. */
+  apiToken?: string;
 }
 
 export function registerBuiltInTools(registry: ToolRegistry, opts?: BuiltInToolOptions): void {
@@ -26,13 +37,13 @@ export function registerBuiltInTools(registry: ToolRegistry, opts?: BuiltInToolO
   registry.register(writeFileDefinition, writeFileHandler);
   registry.register(readFileDefinition, readFileHandler);
   registry.register(httpRequestDefinition, httpRequestHandler);
-  registry.register(execCodeDefinition, makeExecCodeHandler(opts?.agentId ?? "default"));
+  registry.register(execCodeDefinition, makeExecCodeHandler(opts?.agentId ?? "default", opts?.requireSandbox ?? false));
   registry.register(askUserDefinition, askUserHandler);
 
   if (opts) {
     registry.register(
       createTaskDefinition,
-      makeCreateTaskHandler(opts.orchUrl, opts.tenantId, opts.currentTaskId, opts.createdByParent),
+      makeCreateTaskHandler(opts.orchUrl, opts.tenantId, opts.currentTaskId, opts.createdByParent, opts.apiToken),
     );
   }
 }

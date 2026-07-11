@@ -24,6 +24,14 @@ export interface OrchestratorApiDeps {
   telemetry?: TelemetryEmitter;
   onApprovalCreated?: (approval: StoredApproval) => void;
   taskOriginStore?: TaskOriginStore;
+  /** When set, every route except /health requires `Authorization: Bearer
+   * <apiToken>`. Unset (the default) preserves the existing no-auth local-dev
+   * behavior documented in SECURITY.md #5 — this is opt-in, not a breaking
+   * change. A plain string compare, not constant-time: proportional to this
+   * being a self-hosted opt-in floor (SECURITY.md still recommends a reverse
+   * proxy with real auth for anything beyond localhost), not a defense against
+   * a timing-attack-capable adversary already on the same network segment. */
+  apiToken?: string;
 }
 
 const TIMEOUT_SWEEP_INTERVAL_MS = 30_000;
@@ -42,6 +50,17 @@ export class OrchestratorApi {
     this.questionStore = new QuestionStore(deps.db);
 
     this.app.use("*", cors());
+
+    if (deps.apiToken) {
+      const expected = `Bearer ${deps.apiToken}`;
+      this.app.use("*", async (c, next) => {
+        if (c.req.path === "/health") return next(); // liveness stays open for basic monitoring
+        if (c.req.header("Authorization") !== expected) {
+          return c.json({ error: "Unauthorized" }, 401);
+        }
+        await next();
+      });
+    }
 
     const tasks = taskRoutes({
       store: deps.store,

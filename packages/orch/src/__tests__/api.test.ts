@@ -342,3 +342,45 @@ describe("OrchestratorApi", () => {
     });
   });
 });
+
+describe("OrchestratorApi with apiToken set", () => {
+  let db: Database;
+  let authedApi: OrchestratorApi;
+
+  beforeEach(() => {
+    db = createTestDb();
+    const store = new SqliteTaskStore(db);
+    const fsm = new FsmEngine(store);
+    const claimLock = new TaskClaimLock(db);
+    const lockManager = new LockManager();
+    authedApi = new OrchestratorApi({ store, fsm, claimLock, lockManager, db, apiToken: "s3cr3t" });
+  });
+
+  function authedRequest(path: string, init?: RequestInit) {
+    return authedApi.getApp().request(path, init);
+  }
+
+  test("rejects requests with no Authorization header", async () => {
+    const res = await authedRequest("/tasks/pending?tenantId=t1");
+    expect(res.status).toBe(401);
+  });
+
+  test("rejects requests with the wrong token", async () => {
+    const res = await authedRequest("/tasks/pending?tenantId=t1", {
+      headers: { Authorization: "Bearer wrong-token" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("accepts requests with the correct token", async () => {
+    const res = await authedRequest("/tasks/pending?tenantId=t1", {
+      headers: { Authorization: "Bearer s3cr3t" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("/health stays open even without a token", async () => {
+    const res = await authedRequest("/health");
+    expect(res.status).toBe(200);
+  });
+});

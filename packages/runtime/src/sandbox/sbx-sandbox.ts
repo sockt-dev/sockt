@@ -126,10 +126,20 @@ export class SbxSandbox implements Sandbox {
 }
 
 /**
- * Check if the sbx CLI is installed and authenticated.
+ * Check if the sbx CLI is installed and authenticated. Returns false rather
+ * than throwing when sbx isn't on PATH at all — Bun.spawn throws ENOENT
+ * synchronously in that case (not just a nonzero exit code), which this used
+ * to leave uncaught and crash the caller. Found 2026-07-12 while adding
+ * hard-mode exec_code enforcement: a completely absent `sbx` (as opposed to
+ * "installed but not logged in") took down the whole handler instead of
+ * being treated as "sandbox unavailable".
  */
 export async function checkSbxAvailable(): Promise<boolean> {
-  const proc = Bun.spawn(["sbx", "ls", "--json"], { stdout: "pipe", stderr: "pipe" });
-  const code = await proc.exited;
-  return code === 0;
+  try {
+    const proc = Bun.spawn(["sbx", "ls", "--json"], { stdout: "pipe", stderr: "pipe" });
+    const code = await proc.exited;
+    return code === 0;
+  } catch {
+    return false;
+  }
 }

@@ -34,8 +34,9 @@ variables automatically when it spawns services via `sockt deploy`.
 | `DB_PATH` | `./sockt.db` | orch | SQLite file path for the task store |
 | `SLACK_APP_TOKEN` | — | orch | Slack app-level token (`xapp-...`). Set both this and `SLACK_BOT_TOKEN` to enable the Slack bridge (`@sockt/slack-gateway`) — orch opens a Socket Mode connection on startup. See [ARCHITECTURE.md#slack-bridge](ARCHITECTURE.md#slack-bridge) |
 | `SLACK_BOT_TOKEN` | — | orch | Slack bot token (`xoxb-...`), used for `chat.postMessage`/`conversations.list` |
+| `ORCH_API_TOKEN` | — (no auth) | orch, runtime | Opt-in bearer token — when set, every orch route except `/health` requires `Authorization: Bearer <token>`. Every runtime worker needs the *same* value set on its own process. See [SECURITY.md#5](../SECURITY.md#5-the-orchestrator-api-has-no-authentication-by-default) |
 
-`sockt deploy` sets both automatically once `sockt setup slack` has stored encrypted tokens — you don't need to set these by hand if you're using the CLI-managed workflow. They're only for running `orch/src/serve.ts` directly during development.
+`sockt deploy` sets both Slack tokens automatically once `sockt setup slack` has stored encrypted tokens — you don't need to set these by hand if you're using the CLI-managed workflow. They're only for running `orch/src/serve.ts` directly during development.
 
 ---
 
@@ -53,6 +54,7 @@ variables automatically when it spawns services via `sockt deploy`.
 | `APPROVAL_REQUIRED_TOOLS` | `exec_code` if `DEPARTMENT=engops`, else unset (no gate) | runtime | Comma-separated tool names that require human approval before running. Set explicitly (including `""` to force no gate) to override the department default — e.g. gate other tools/departments, or un-gate engops. See [ARCHITECTURE.md#human-in-the-loop-hitl](ARCHITECTURE.md#human-in-the-loop-hitl) |
 | `HITL_TIMEOUT_MS` | `300000` (5 min) | runtime | How long `AgentRunner` waits for an approval decision before treating it as a timeout (fail-closed — the gated tool does not run) |
 | `HITL_POLL_INTERVAL_MS` | `2000` | runtime | How often `HttpHitlGate` polls orch for a decision while waiting |
+| `EXEC_CODE_REQUIRE_SANDBOX` | `true` if `DEPARTMENT=engops`, else `false` | runtime | When `true`, `exec_code` refuses to run (throws) instead of silently falling back to an unsandboxed temp dir if `sbx` isn't installed/logged in. Otherwise a human approving a gated `exec_code` call approves an action that may not actually be isolated. Set explicitly (`"true"`/`"false"`) to override the department default |
 
 ### Tuning for rate-limited free-tier LLMs (e.g. Groq)
 
