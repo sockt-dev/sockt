@@ -1,0 +1,21 @@
+{
+  "name": "social-hook-writing",
+  "description": "Write short-form social post hooks and copy (LinkedIn-style) using the two-line opening/contrast hook formula",
+  "steps": [
+    { "action": "Confirm the topic and, if a specific angle isn't given, pick from: number-led, contrarian, personal transformation, authority reference, admission, or future-prediction", "expectedOutcome": "One clear angle chosen, not a generic mix" },
+    { "action": "Write the opening line: max ~40 characters, no questions, states something unexpected or specific — not a vague teaser", "expectedOutcome": "Concrete opening line with a number/metric where possible" },
+    { "action": "Write the contrast line: max ~40 characters, reframes or undercuts the opening to create a curiosity gap", "expectedOutcome": "A pair of lines that only make sense read together" },
+    { "action": "Generate the full post body underneath the hook, matching whatever voice/tone context was given — do not invent unverifiable stats or fabricate personal claims not provided by the requester", "expectedOutcome": "Body delivers on the hook's promise, no invented specifics" },
+    { "action": "Save the hook variants and full post to file", "tool": "write_file", "args": { "filename": "social_post.md" } }
+  ],
+  "preconditions": [
+    "A topic and, ideally, some voice/tone guidance is available"
+  ],
+  "successCriteria": [
+    "Hook stays within the two-line, ~40-char-per-line structure",
+    "No fabricated personal claims, credentials, or metrics not supplied by the requester",
+    "Post body delivers on what the hook promises rather than being generic"
+  ],
+  "compiledFrom": "charlie947/social-media-skills@hook-generator + charlie947/social-media-skills@post-writer",
+  "compiledAt": "2026-07-12T00:00:00.000Z"
+}

@@ -59,3 +59,10 @@ Skills sourced from: MMEHDI0606/ai-agent-foundation-template + npx skills regist
 - `404kidwiz/claude-supercode-skills@devops-incident-responder` (105 installs)
 - `vasilyu1983/ai-agents-public@ops-devops-platform` (153 installs)
 - `MMEHDI0606/ai-agent-foundation-template` (deployment-engineer, devops-troubleshooter, sentry-automation, pagerduty-automation)
+
+## Evaluated, not added (2026-07-12)
+
+Two Claude Code plugin marketplaces were reviewed for this department alongside the growth/product additions (see growth/SKILLS_INDEX.md and product/SKILLS_INDEX.md) and deliberately left out:
+
+- **`JuliusBrussee/caveman`** — compressed code-review comments, commit messages, and context-compression tooling for a human using Claude Code interactively. This is a coding-workflow aid for a developer, not an ops/incident/deployment skill an engops agent would execute as a task step — doesn't match this department's actual scope (production incidents, runbooks, deployments).
+- **`fuuuuuuma/ai-second-brain-kit`** — builds a persistent Obsidian-vault "second brain" for a human's own Claude Code sessions. Conceptually adjacent to Sockt's own CADVP/GBrain memory pipeline (see [docs/ARCHITECTURE.md](../../../../../../docs/ARCHITECTURE.md#memory-pipeline-cadvp--gbrain)), but that's infrastructure Sockt already has for its agents — not a department task skill.

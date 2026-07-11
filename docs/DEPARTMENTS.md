@@ -104,12 +104,17 @@ packages/orch/src/registry/skills/
     email-sequence.skill
     outreach-copy.skill
     growth-metrics.skill
+    churn-prevention.skill     ← added 2026-07-12, from coreyhaines31/marketingskills
+    seo-content-audit.skill    ← added 2026-07-12, from AgriciDaniel/claude-seo
+    social-hook-writing.skill  ← added 2026-07-12, from charlie947/social-media-skills
   product/
     SKILLS_INDEX.md
     product-manager.skill
     spec-writing.skill
     user-research.skill
     github-issues.skill
+    pricing-strategy.skill      ← added 2026-07-12, from coreyhaines31/marketingskills
+    onboarding-activation.skill ← added 2026-07-12, from coreyhaines31/marketingskills
   engops/
     SKILLS_INDEX.md
     incident-responder.skill
@@ -117,6 +122,15 @@ packages/orch/src/registry/skills/
     deployment-engineer.skill
     devops-troubleshooter.skill
 ```
+
+The 2026-07-12 additions were distilled from Claude Code plugin marketplaces
+(`coreyhaines31/marketingskills`, `AgriciDaniel/claude-seo`,
+`charlie947/social-media-skills`) into this repo's atomic `.skill` format —
+same pattern as every other skill here, which are themselves compiled from
+external skill repos (see each department's `SKILLS_INDEX.md` → Sources).
+Two other evaluated marketplaces (`JuliusBrussee/caveman`,
+`fuuuuuuma/ai-second-brain-kit`) didn't have a clean fit in any department —
+see the note at the bottom of `engops/SKILLS_INDEX.md` for why.
 
 ### The `.skill` file format
 

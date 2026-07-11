@@ -1,0 +1,23 @@
+{
+  "name": "churn-prevention",
+  "description": "Design cancel flows with dynamic save offers, proactive retention interventions, and dunning sequences for failed-payment recovery",
+  "steps": [
+    { "action": "Classify the churn type: voluntary (customer chooses to cancel) vs involuntary (payment failed) — they need different fixes", "expectedOutcome": "Churn type identified, since a discount won't fix a declined card" },
+    { "action": "For voluntary churn: design a single-question exit survey (5-8 reason options, most common first) that determines which save offer to show", "expectedOutcome": "Exit survey with reason categories: too expensive, not using it enough, missing feature, switching to competitor, technical issues, temporary need" },
+    { "action": "Match a save offer to the stated reason — a discount only works for price sensitivity, a pause works for low engagement, a roadmap preview works for missing features", "expectedOutcome": "One primary offer + one fallback per reason, not a blanket discount for everyone" },
+    { "action": "For involuntary churn: design a dunning email sequence (Day 0/3/7/10) with a direct payment-update link and smart retry timing", "expectedOutcome": "4-email dunning sequence, escalating tone, no blame language" },
+    { "action": "Write the churn analysis/flow design to file", "tool": "write_file", "args": { "filename": "churn_prevention_plan.md" } }
+  ],
+  "preconditions": [
+    "Current churn rate and whether it's voluntary or involuntary is known or can be asked",
+    "Billing provider and whether a cancel flow already exists is known or can be asked"
+  ],
+  "successCriteria": [
+    "Offers are matched to stated cancel reasons, not a single blanket discount",
+    "Discount depth stays in the 20-30% range (50%+ trains customers to churn for deals)",
+    "The 'keep cancelling' option stays visible — no dark patterns",
+    "Dunning sequence has escalating urgency across at least 3 emails with a direct payment-update link"
+  ],
+  "compiledFrom": "coreyhaines31/marketingskills@churn-prevention",
+  "compiledAt": "2026-07-12T00:00:00.000Z"
+}

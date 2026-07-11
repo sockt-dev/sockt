@@ -1,0 +1,21 @@
+{
+  "name": "onboarding-activation",
+  "description": "Design post-signup onboarding flows that minimize time-to-value and drive first-session activation",
+  "steps": [
+    { "action": "Define the activation event (the 'aha moment') — the specific action that separates users who stick around from users who churn early", "expectedOutcome": "One concrete, observable activation event, not a vague description like 'engaged'" },
+    { "action": "Map the current signup-to-value path and identify every step between signup and experiencing core value", "expectedOutcome": "Step-by-step path with the likely biggest drop-off point flagged" },
+    { "action": "Redesign the first session around one goal: do the core action, don't just show a tutorial about it — cut every step that isn't required to reach the activation event", "expectedOutcome": "First-session flow with a single primary outcome, secondary features deferred" },
+    { "action": "Add progress visibility (checklist, percent-complete, or milestone markers) so the user can see how close they are to activation", "expectedOutcome": "A concrete progress mechanism, not just a hope that users self-navigate" },
+    { "action": "Write the onboarding flow design to file", "tool": "write_file", "args": { "filename": "onboarding_flow.md" } }
+  ],
+  "preconditions": [
+    "The product's core value proposition and target user (B2B/B2C) are known or can be asked"
+  ],
+  "successCriteria": [
+    "Activation event is a single concrete action, not a vague description",
+    "First session has one goal, not a tour of every feature",
+    "Flow design is 'do the thing' not 'read about the thing'"
+  ],
+  "compiledFrom": "coreyhaines31/marketingskills@onboarding",
+  "compiledAt": "2026-07-12T00:00:00.000Z"
+}

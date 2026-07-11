@@ -1,0 +1,20 @@
+{
+  "name": "seo-content-audit",
+  "description": "Audit content quality and search/AI-citation readiness using Google's Who/How/Why helpful-content heuristic and the E-E-A-T framework",
+  "steps": [
+    { "action": "Apply Google's Who/How/Why test: who created this content (visible byline, credentials)? how was it created (original research vs generic)? why does it exist (to help readers vs to attract clicks)?", "expectedOutcome": "Explicit answer to all three questions, not skipped" },
+    { "action": "Score Experience, Expertise, Authoritativeness, Trustworthiness (E-E-A-T) against the actual page/draft content", "expectedOutcome": "Per-factor score with the specific evidence (or gap) cited from the content itself" },
+    { "action": "Research the topic and competing content with web_search to check for thin-content risk (word-count-padding, no first-hand evidence, no differentiation)", "tool": "web_search", "expectedOutcome": "Concrete comparison points, not assumed" },
+    { "action": "Write the audit report: Who/How/Why verdict, E-E-A-T scores with evidence, thin-content risk flags, concrete fix list", "tool": "write_file", "args": { "filename": "seo_content_audit.md" } }
+  ],
+  "preconditions": [
+    "A URL, draft, or content topic to audit is provided"
+  ],
+  "successCriteria": [
+    "All three Who/How/Why questions answered explicitly, not skipped",
+    "Every E-E-A-T score is backed by a specific citation from the actual content, not a generic industry claim",
+    "Report distinguishes 'written to a word-count target' content from genuinely helpful content"
+  ],
+  "compiledFrom": "AgriciDaniel/claude-seo@seo-content",
+  "compiledAt": "2026-07-12T00:00:00.000Z"
+}

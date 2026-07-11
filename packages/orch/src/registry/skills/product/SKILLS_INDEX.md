@@ -30,6 +30,18 @@ Skills sourced from: MMEHDI0606/ai-agent-foundation-template + npx skills regist
 **Format:** Conventional commit titles, Given/When/Then ACs, p0/p1/p2 priority labels
 **Output:** Issue list or direct GitHub API calls to create issues
 
+### 5. `pricing-strategy`
+**When to use:** Task involves pricing decisions, packaging, tiers, monetization
+**What it does:** Value-based pricing across packaging, value metric, and price point
+**Rule:** Price between the next-best alternative and perceived value — never from cost-to-serve alone
+**Output:** Pricing recommendation with a named value metric and a stated reason per price point
+
+### 6. `onboarding-activation`
+**When to use:** Task involves post-signup onboarding, activation rate, first-run experience
+**What it does:** Defines the activation event and redesigns the first session around reaching it
+**Principle:** "Do the thing" beats "show the thing" — cut every step that isn't required for activation
+**Output:** Onboarding flow design with a concrete activation event and progress mechanism
+
 ---
 
 ## Skill Selection Guide
@@ -40,6 +52,8 @@ Skills sourced from: MMEHDI0606/ai-agent-foundation-template + npx skills regist
 | PRD, spec, requirements, feature doc, one-pager | `spec-writing` |
 | user feedback, interviews, insights, JTBD, persona | `user-research` |
 | GitHub issue, ticket, task, backlog item, story | `github-issues` |
+| pricing, tiers, packaging, monetization, how much to charge | `pricing-strategy` |
+| onboarding, activation, first-run, time-to-value | `onboarding-activation` |
 
 ---
 
@@ -50,3 +64,5 @@ Skills sourced from: MMEHDI0606/ai-agent-foundation-template + npx skills regist
 - `davila7/claude-code-templates@ai-product` (394 installs)
 - `neolabhq/context-engineering-kit@attach-review-to-pr` (737 installs)
 - `MMEHDI0606/ai-agent-foundation-template` (product-design, product-inventor, linear-automation)
+- `coreyhaines31/marketingskills@pricing` (Claude Code plugin marketplace `coreyhaines31/marketingskills`, v2.8.7) — added 2026-07-12
+- `coreyhaines31/marketingskills@onboarding` — added 2026-07-12

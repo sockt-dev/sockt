@@ -1,0 +1,21 @@
+{
+  "name": "pricing-strategy",
+  "description": "Design SaaS pricing and packaging using value-based pricing across the three axes: packaging, value metric, and price point",
+  "steps": [
+    { "action": "Identify the value metric — what should be charged for such that price scales with value delivered (per-seat, per-usage, flat fee) — and confirm it's easy to understand and hard to game", "expectedOutcome": "One named value metric with justification, not multiple competing metrics" },
+    { "action": "Research comparable/competitor pricing and positioning with web_search", "tool": "web_search", "expectedOutcome": "At least 2-3 real comparison points, not assumed numbers" },
+    { "action": "Design packaging: what's included at each tier, and how tiers differ (features, limits, support level) — price between the next-best alternative and perceived value, not from cost-to-serve", "expectedOutcome": "Tier table with concrete inclusions per tier" },
+    { "action": "Set price points and state the reasoning (target ARPU, willingness-to-pay signal, or explicit assumption if no data exists)", "expectedOutcome": "Every price point has a stated reason or explicit stated assumption — never an invented number presented as researched" },
+    { "action": "Write the pricing recommendation to file", "tool": "write_file", "args": { "filename": "pricing_strategy.md" } }
+  ],
+  "preconditions": [
+    "Product type, target market, and go-to-market motion (self-serve/sales-led/hybrid) are known or can be asked"
+  ],
+  "successCriteria": [
+    "A single named value metric is chosen and justified",
+    "Every price point has a stated reason (data or explicit assumption) — no invented 'confirmed via internal data' claims",
+    "Packaging clearly shows what's gained/lost moving between tiers"
+  ],
+  "compiledFrom": "coreyhaines31/marketingskills@pricing",
+  "compiledAt": "2026-07-12T00:00:00.000Z"
+}
