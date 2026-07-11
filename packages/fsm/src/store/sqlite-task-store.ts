@@ -18,12 +18,15 @@ interface TaskRow {
   max_attempts: number;
   created_at: string;
   updated_at: string;
+  target_department: string | null;
+  target_role: string | null;
 }
 
 const PATCH_COLUMN_MAP: Record<keyof TaskPatch, string> = {
   status: "status",
   owner: "owner",
   output: "output",
+  description: "description",
   llmCallsUsed: "llm_calls_used",
   attemptCount: "attempt_count",
 };
@@ -43,6 +46,8 @@ function mapRow(row: TaskRow): Task {
     maxAttempts: row.max_attempts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    targetDepartment: row.target_department,
+    targetRole: row.target_role,
   };
 }
 
@@ -65,8 +70,8 @@ export class SqliteTaskStore implements TaskStore {
     db.exec("PRAGMA journal_mode=WAL");
 
     this.insertStmt = db.prepare(`
-      INSERT INTO tasks (id, tenant_id, status, owner, parent_id, description, output, llm_calls_used, llm_calls_budget, attempt_count, max_attempts, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+      INSERT INTO tasks (id, tenant_id, status, owner, parent_id, description, output, llm_calls_used, llm_calls_budget, attempt_count, max_attempts, created_at, updated_at, target_department, target_role)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
     `);
 
     this.getStmt = db.prepare("SELECT * FROM tasks WHERE id = ?1");
@@ -128,7 +133,9 @@ export class SqliteTaskStore implements TaskStore {
       0,
       maxAttempts,
       timestamp,
-      timestamp
+      timestamp,
+      task.targetDepartment ?? null,
+      task.targetRole ?? null
     );
 
     return {
@@ -145,6 +152,8 @@ export class SqliteTaskStore implements TaskStore {
       maxAttempts,
       createdAt: timestamp,
       updatedAt: timestamp,
+      targetDepartment: task.targetDepartment ?? null,
+      targetRole: task.targetRole ?? null,
     };
   }
 

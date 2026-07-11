@@ -146,4 +146,91 @@ describe("Orchestrator", () => {
     const event = telemetry._events[0] as { type: string };
     expect(event.type).toBe("task_created");
   });
+
+  describe("clarifying-question resume via threaded reply", () => {
+    test("a threaded reply matching a pending question answers it and resumes the task", async () => {
+      await orch.start();
+      const port = orch.getPort();
+
+      // Create the top-level task (also persists its Slack origin).
+      await orch.handleMessage({
+        id: "msg-1",
+        platform: "slack",
+        channelId: "C123",
+        threadId: "T1",
+        userId: "U456",
+        content: "plan Q3 campaign",
+        mentions: ["Test Agent"],
+        attachments: [],
+        timestamp: "2024-01-01T00:00:00Z",
+        tenantId: "t1",
+      });
+      const pendingRes = await fetch(`http://localhost:${port}/tasks/pending?tenantId=t1`);
+      const [task] = await pendingRes.json();
+
+      await fetch(`http://localhost:${port}/tasks/${task.id}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: "agent-1" }),
+      });
+      await fetch(`http://localhost:${port}/tasks/${task.id}/request-input`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: "Which environment?", agentId: "agent-1" }),
+      });
+
+      const blockedRes = await fetch(`http://localhost:${port}/tasks/${task.id}`);
+      const blocked = await blockedRes.json();
+      expect(blocked.status).toBe("blocked");
+
+      // The reply: same channel + thread as the origin, no mention — proves
+      // this is matched via the pending question, not normal routing (which
+      // would find no agent and create nothing).
+      await orch.handleMessage({
+        id: "msg-2",
+        platform: "slack",
+        channelId: "C123",
+        threadId: "T1",
+        userId: "U456",
+        content: "staging, please",
+        mentions: [],
+        attachments: [],
+        timestamp: "2024-01-01T00:01:00Z",
+        tenantId: "t1",
+      });
+
+      const resumedRes = await fetch(`http://localhost:${port}/tasks/${task.id}`);
+      const resumed = await resumedRes.json();
+      expect(resumed.status).toBe("pending");
+      expect(resumed.owner).toBeNull();
+      expect(resumed.description).toContain("staging, please");
+
+      // No new task was created for the reply itself.
+      const allPendingRes = await fetch(`http://localhost:${port}/tasks/pending?tenantId=t1`);
+      const allPending = await allPendingRes.json();
+      expect(allPending).toHaveLength(1);
+    });
+
+    test("a threaded reply with no pending question is routed normally", async () => {
+      await orch.start();
+      const port = orch.getPort();
+
+      await orch.handleMessage({
+        id: "msg-3",
+        platform: "slack",
+        channelId: "C999",
+        threadId: "T-unrelated",
+        userId: "U456",
+        content: "plan Q3 campaign",
+        mentions: ["Test Agent"],
+        attachments: [],
+        timestamp: "2024-01-01T00:00:00Z",
+        tenantId: "t1",
+      });
+
+      const res = await fetch(`http://localhost:${port}/tasks/pending?tenantId=t1`);
+      const tasks = await res.json();
+      expect(tasks).toHaveLength(1);
+    });
+  });
 });

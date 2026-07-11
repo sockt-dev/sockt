@@ -1,10 +1,12 @@
-import type { AgentConfig, InboundMessage } from "@sockt/types";
+import type { AgentConfig, AgentRole, InboundMessage } from "@sockt/types";
 import type { AgentRegistry } from "../registry/agent-registry.ts";
+
+type AgentResolver = () => AgentConfig | undefined;
 
 export class MessageRouter {
   private readonly registry: AgentRegistry;
-  private channelMappings = new Map<string, string>();
-  private contentRules: [RegExp, string][] = [];
+  private channelMappings = new Map<string, AgentResolver>();
+  private contentRules: [RegExp, AgentResolver][] = [];
 
   constructor(registry: AgentRegistry) {
     this.registry = registry;
@@ -19,18 +21,16 @@ export class MessageRouter {
     }
 
     if (matched.length === 0) {
-      const channelAgentId = this.channelMappings.get(message.channelId);
-      if (channelAgentId) {
-        const agent = this.registry.get(channelAgentId);
-        if (agent) matched.push(agent);
-      }
+      const resolveChannel = this.channelMappings.get(message.channelId);
+      const agent = resolveChannel?.();
+      if (agent) matched.push(agent);
     }
 
     if (matched.length === 0) {
-      for (const [pattern, agentId] of this.contentRules) {
+      for (const [pattern, resolve] of this.contentRules) {
         pattern.lastIndex = 0;
         if (pattern.test(message.content)) {
-          const agent = this.registry.get(agentId);
+          const agent = resolve();
           if (agent) matched.push(agent);
           break;
         }
@@ -41,10 +41,18 @@ export class MessageRouter {
   }
 
   addChannelMapping(channelId: string, agentId: string): void {
-    this.channelMappings.set(channelId, agentId);
+    this.channelMappings.set(channelId, () => this.registry.get(agentId));
   }
 
   addContentRule(pattern: RegExp, agentId: string): void {
-    this.contentRules.push([pattern, agentId]);
+    this.contentRules.push([pattern, () => this.registry.get(agentId)]);
+  }
+
+  addChannelRoute(channelId: string, department: string, role: AgentRole): void {
+    this.channelMappings.set(channelId, () => this.registry.getByDepartmentAndRole(department, role));
+  }
+
+  addContentRoute(pattern: RegExp, department: string, role: AgentRole): void {
+    this.contentRules.push([pattern, () => this.registry.getByDepartmentAndRole(department, role)]);
   }
 }

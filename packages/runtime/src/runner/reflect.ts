@@ -9,7 +9,8 @@ Respond with a JSON object in this exact format:
 
 - Set "complete": true if the task has been successfully accomplished. Include the final output.
 - Set "escalate": true if the task cannot be completed (too complex, needs human help, or impossible).
-- Set both to false if more attempts are needed.`;
+- Set both to false if more attempts are needed.
+- A tool call that failed because of a fixable argument problem (e.g. "requires a non-empty description") is NOT a reason to escalate — set both false and retry with corrected arguments on the next attempt. Only escalate for failures that retrying with different arguments can't fix.`;
 
 export async function reflectPhase(
   ctx: ExecutionContext,

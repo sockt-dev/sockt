@@ -87,9 +87,9 @@ stateDiagram-v2
     pending --> in_progress: agent claims
     in_progress --> completed: reflect() returns complete
     in_progress --> escalated: budget exhausted OR reflect() escalates
-    in_progress --> blocked: HITL gate denies a tool call
+    in_progress --> blocked: HITL gate denies/times out a tool call, OR agent asks a clarifying question
     escalated --> pending: human/architect approves retry
-    blocked --> pending: dependency resolved
+    blocked --> pending: approval granted / question answered
     pending --> cancelled: operator cancels
     in_progress --> cancelled: operator cancels
     completed --> [*]
@@ -145,7 +145,8 @@ any agent whose `AgentConfig.tools` list includes them:
 | `write_file` / `read_file` | I/O against the agent's scratch directory | — |
 | `http_request` | Generic HTTP fetch, e.g. for CRM/ticketing APIs | Basic SSRF guard (see [SECURITY.md](../SECURITY.md)) |
 | `create_task` | Creates a subtask on the orchestrator with `parentId` set — this is how architect agents delegate | — |
-| `exec_code` | Runs Python/JS/TS/Bash | **Docker AI Sandbox** microVM if `sbx` installed, otherwise unsandboxed temp dir with a warning |
+| `exec_code` | Runs Python/JS/TS/Bash | **Docker AI Sandbox** microVM if `sbx` installed, otherwise unsandboxed temp dir with a warning; gated by `APPROVAL_REQUIRED_TOOLS` for `engops` by default — see [Human-in-the-Loop](#human-in-the-loop-hitl) |
+| `ask_user` | Not a real action — short-circuits the run and asks the human a clarifying question instead of guessing. See [Human-in-the-Loop](#human-in-the-loop-hitl) | — |
 
 ## Memory Pipeline (CADVP → GBrain)
 
@@ -172,11 +173,12 @@ waiting for the agent to learn them from scratch.
 `@sockt/orch` exposes a Hono HTTP server (default port `3100`). Full endpoint
 reference: [docs/API.md](API.md). Key groups:
 
-- **Tasks** — create, list, get, patch, claim, complete, escalate, cancel,
-  approve, reject, retry, record-llm-call
+- **Tasks** — create, list, get, patch, claim, complete, escalate, block,
+  request-input, cancel, approve, reject, retry, record-llm-call
 - **Agents** — register, list, get, deregister (self-registration on
   runtime startup)
-- **Approvals** — HITL gate: request, list pending, decide
+- **Approvals** — HITL gate: request, list pending, decide — see
+  [Human-in-the-Loop](#human-in-the-loop-hitl)
 - **Health** — service status, active agent count, pending task count
 
 The orchestrator has **no built-in authentication** — see
@@ -214,17 +216,128 @@ Key points:
   HTTP endpoint or ingress required
 - **Outbound** replies use Slack's normal Web API (`chat.postMessage`) —
   Socket Mode is receive-only
-- The task → Slack-destination correlation lives in `SlackReplyTelemetry`,
-  in memory, keyed by `taskId`. It's populated from the `task_created`
-  telemetry event's `data.channelId`/`data.threadId`/`data.platform` fields
-  (set in `Orchestrator.handleMessage`) and consumed on `task_completed`/
-  `task_escalated`. If the orchestrator restarts mid-task, that task still
-  completes normally — it just won't get a Slack reply, since the
-  correlation isn't persisted
+- **Inbound events are deduplicated** on `channel:ts` before ever reaching the
+  message handler (`SlackChannelGateway`, a capped 500-entry FIFO — see
+  `isDuplicateEvent` in `packages/slack-gateway/src/gateway.ts`). A workspace
+  subscribed to both `message.channels` and `app_mentions:read` gets two
+  separate events — a `message` event and an `app_mention` event — for one
+  `@sockt` message, both carrying the same `ts`; without this, that alone
+  produced two tasks per human send in ~17/20 rows of the first eval pass
+  (see [evals/test-plan.md](../evals/test-plan.md)). Does not cover message
+  *edits* creating a duplicate task — that's a separate, still-open bug (see
+  test-plan.md's M2 probe), since an edit's event carries a different `ts`
+  than the original
+- The task → Slack-destination correlation is cached in `SlackReplyTelemetry`,
+  in memory, keyed by `taskId`, populated from the `task_created` telemetry
+  event's `data.channelId`/`data.threadId`/`data.platform` fields (set in
+  `Orchestrator.handleMessage`) and consumed on `task_completed`/
+  `task_escalated`/`task_blocked`/`task_needs_input`. It's also persisted to
+  a `task_origins` SQLite table (`packages/orch/src/store/task-origin-store.ts`)
+  at task-creation time — if the in-memory cache misses (e.g. the orchestrator
+  restarted mid-task), `SlackReplyTelemetry`'s optional `originLookup` falls
+  back to that table, so a restart no longer silently loses the reply. This
+  was a confirmed gap in the first eval pass (mechanical probe M3, see
+  [evals/test-plan.md](../evals/test-plan.md)) — fixed since
 - Enabled automatically by `sockt deploy` once `sockt setup slack` has
   stored encrypted tokens (`~/.sockt/config.yaml`) — see
   [CONFIGURATION.md](CONFIGURATION.md) for the `SLACK_APP_TOKEN`/
   `SLACK_BOT_TOKEN` env vars this resolves to
+
+## Human-in-the-Loop (HITL)
+
+Built directly in response to the first eval pass's biggest finding:
+**capability hallucination** — agents confidently claiming to have done
+things (sent an email, SSH'd into a box, restarted a service) or answered
+underspecified questions ("should we build feature X?") with fabricated
+confidence instead of asking. See the "Status update" section at the bottom
+of [evals/test-plan.md](../evals/test-plan.md) for the failure rows this
+targets (G5, P4, P5, E4, E6, and 4 more).
+
+There are two related but distinct mechanisms, both landing the task in
+`blocked` (see the FSM diagram above) until a human acts:
+
+### 1. Tool approval gate
+
+For tools an agent shouldn't be allowed to run unattended (`exec_code` is the
+default — see [CONFIGURATION.md](CONFIGURATION.md#runtime-agent-worker)):
+
+```mermaid
+sequenceDiagram
+    participant Runner as AgentRunner
+    participant Gate as HttpHitlGate
+    participant Orch as orch (ApprovalStore)
+    participant Slack as SlackHitlBridge
+
+    Runner->>Runner: plan step names a tool in APPROVAL_REQUIRED_TOOLS
+    Runner->>Gate: requestApproval(...)
+    Gate->>Orch: POST /approvals
+    Orch->>Slack: onApprovalCreated -> postApprovalRequest
+    Slack->>Slack: chat.postMessage with Approve/Deny buttons
+    Note over Runner,Gate: waitForApproval polls GET /approvals/:id
+    Slack->>Orch: block_actions click -> ApprovalStore.decide()
+    Gate-->>Runner: decision {status: approved|denied|timeout}
+    Runner->>Runner: anything but "approved" -> TaskOutcome{status:"blocked"}
+```
+
+- **`ApprovalStore`** (`packages/orch/src/api/approval-store.ts`) is
+  SQLite-backed against the shared `pending_human_inputs` table — survives an
+  orch restart, unlike the in-memory `Map` it replaced. A 30s sweep
+  (`OrchestratorApi`) marks any approval past its `timeoutAt` as `timeout`,
+  belt-and-braces with the poller's own client-side deadline.
+- **`HttpHitlGate`** (`packages/runtime/src/hitl/http-hitl-gate.ts`) is the
+  `HitlGate` implementation a runtime worker uses — polls
+  `GET /approvals/:id` every `HITL_POLL_INTERVAL_MS` until a decision or its
+  own `HITL_TIMEOUT_MS` deadline.
+- **Fail-closed**: anything other than an explicit `"approved"` — denied,
+  timeout, or the approval row simply not existing — blocks the tool call.
+  A prior version only checked for `"denied"`, which let a client-side
+  timeout fall through and run the gated tool anyway.
+- **`SlackHitlBridge`** (`packages/orch/src/hitl/slack-hitl-bridge.ts`) posts
+  the Block Kit approve/deny message to the thread that triggered the task
+  (looked up via `task_origins`) and routes button clicks back to
+  `ApprovalStore.decide()`, then edits the message in place to show the
+  decision.
+
+### 2. Clarifying questions (`ask_user`)
+
+For when the task genuinely can't proceed without more information — the
+`ask_user` pseudo-tool (`packages/runtime/src/tools/built-in/ask_user.ts`) is
+listed in the tool registry purely so plan-phase tool-name grounding accepts
+it, but `AgentRunner` intercepts it *before* the Act phase (a human's answer
+can't be observed within the same run, so there's nothing to execute):
+
+```mermaid
+sequenceDiagram
+    participant Runner as AgentRunner
+    participant Orch as orch
+    participant Slack
+    participant Human
+
+    Runner->>Runner: plan step has tool: "ask_user"
+    Runner-->>Runner: TaskOutcome{status:"needs_input", question}
+    Note over Runner: serve.ts calls orchClient.requestInput(...)
+    Orch->>Orch: POST /tasks/:id/request-input<br/>in_progress -> blocked, owner cleared<br/>QuestionStore.create (kind='question')
+    Orch->>Slack: task_needs_input telemetry -> reply-telemetry posts the question
+    Human->>Slack: replies in the same thread
+    Slack->>Orch: handleMessage(InboundMessage)
+    Orch->>Orch: QuestionStore.findPendingByThread — matches before normal routing
+    Orch->>Orch: answer question, append to task.description,<br/>blocked -> pending, owner cleared
+    Note over Orch: task re-enters the claim queue with the answer in its description
+```
+
+- **`QuestionStore`** (`packages/orch/src/api/question-store.ts`) is the
+  question-shaped sibling of `ApprovalStore`, sharing the same
+  `pending_human_inputs` table (`kind='question'`) — it stores the
+  originating Slack channel/thread at creation time so a later reply can be
+  matched back without a second lookup.
+- **Thread-reply interception** happens in `Orchestrator.handleMessage`,
+  *before* normal message routing: if the message is a threaded reply and
+  `QuestionStore.findPendingByThread` finds a match, it's treated as an
+  answer, not a new request — otherwise a reply like "staging, please" would
+  itself spawn a new (nonsensical) task.
+- The answer is appended to the task's `description` (tasks have no separate
+  conversation field) so the next Plan phase reads it as part of the task
+  context.
 
 ## Departments & Multi-Agent Coordination
 

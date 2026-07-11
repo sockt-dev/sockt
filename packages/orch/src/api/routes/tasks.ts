@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { SqliteTaskStore, FsmEngine, TaskClaimLock } from "@sockt/fsm";
 import type { LockManager } from "../../lock/lock-manager.ts";
 import type { TelemetryEmitter } from "@sockt/types";
+import type { QuestionStore } from "../question-store.ts";
+import type { TaskOriginStore } from "../../store/task-origin-store.ts";
 
 export interface TaskRouteDeps {
   store: SqliteTaskStore;
@@ -9,10 +11,12 @@ export interface TaskRouteDeps {
   claimLock: TaskClaimLock;
   lockManager: LockManager;
   telemetry?: TelemetryEmitter;
+  questionStore?: QuestionStore;
+  taskOriginStore?: TaskOriginStore;
 }
 
 export function taskRoutes(deps: TaskRouteDeps): Hono {
-  const { store, fsm, claimLock, lockManager, telemetry } = deps;
+  const { store, fsm, claimLock, lockManager, telemetry, questionStore, taskOriginStore } = deps;
   const app = new Hono();
 
   // Legacy: body contains { taskId, agentId }
@@ -73,6 +77,56 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       await store.update(taskId, { output: reason });
       lockManager.release(agentId ?? "unknown", taskId);
       telemetry?.emit({ type: "task_escalated", taskId, tenantId: task.tenantId, data: { reason } });
+      return c.json(task);
+    } catch {
+      return c.json({ error: "Task is not in_progress" }, 400);
+    }
+  });
+
+  // Transitions in_progress -> blocked. Not terminal — blocked -> pending is a
+  // legal FSM transition, so a human unblocking via /approve (or the future
+  // clarifying-question answer path) can send this task back to the pending
+  // queue. Added 2026-07-12 for the HITL approval gate: a denied or timed-out
+  // approval was returning TaskOutcome{status:"blocked"} from the runner
+  // already, but nothing ever transitioned the task or told Slack — it just
+  // sat in_progress forever with the claim lock never released.
+  app.post("/tasks/:id/block", async (c) => {
+    const taskId = c.req.param("id");
+    const { dependency, agentId } = await c.req.json();
+    try {
+      const task = await fsm.transition(taskId, "in_progress", "blocked", agentId ?? "unknown");
+      await store.update(taskId, { output: dependency });
+      lockManager.release(agentId ?? "unknown", taskId);
+      telemetry?.emit({ type: "task_blocked", taskId, tenantId: task.tenantId, data: { dependency } });
+      return c.json(task);
+    } catch {
+      return c.json({ error: "Task is not in_progress" }, 400);
+    }
+  });
+
+  // Like /block, but also records the clarifying question in QuestionStore
+  // (kind='question' in pending_human_inputs) so a later threaded reply can
+  // be matched back to it — see Orchestrator.handleMessage's thread-reply
+  // interception and QuestionStore.findPendingByThread.
+  app.post("/tasks/:id/request-input", async (c) => {
+    const taskId = c.req.param("id");
+    const { question, agentId } = await c.req.json();
+    try {
+      const task = await fsm.transition(taskId, "in_progress", "blocked", agentId ?? "unknown");
+      await store.update(taskId, { output: `Awaiting human input: ${question}` });
+      lockManager.release(agentId ?? "unknown", taskId);
+
+      const origin = taskOriginStore?.get(taskId);
+      questionStore?.create({
+        tenantId: task.tenantId,
+        taskId,
+        agentId: agentId ?? "unknown",
+        question,
+        slackChannelId: origin?.channelId,
+        slackThreadId: origin?.threadId ?? undefined,
+      });
+
+      telemetry?.emit({ type: "task_needs_input", taskId, tenantId: task.tenantId, data: { question } });
       return c.json(task);
     } catch {
       return c.json({ error: "Task is not in_progress" }, 400);
@@ -147,7 +201,14 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
     const task = await store.get(taskId);
     if (!task) return c.json({ error: "Task not found" }, 404);
     try {
-      const updated = await store.update(taskId, { status: "pending" });
+      // owner must be cleared, not just status: claimStmt only matches
+      // `status='pending' AND owner IS NULL`. Without this, a task retried
+      // from escalated/blocked keeps its previous owner and can never be
+      // re-claimed by anyone — a task that's permanently "pending" but
+      // invisible to the claim loop. Found 2026-07-12 while wiring the HITL
+      // block()/retry unblock path (previously untested — HITL was never
+      // wired up, so blocked was unreachable and retry was never exercised).
+      const updated = await store.update(taskId, { status: "pending", owner: null });
       telemetry?.emit({ type: "task_retried", taskId, tenantId: task.tenantId, data: {} });
       return c.json(updated);
     } catch {
@@ -160,7 +221,8 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
     const task = await store.get(taskId);
     if (!task) return c.json({ error: "Task not found" }, 404);
     try {
-      const updated = await store.update(taskId, { status: "pending" });
+      // See /retry — same owner-clearing requirement.
+      const updated = await store.update(taskId, { status: "pending", owner: null });
       telemetry?.emit({ type: "task_approved", taskId, tenantId: task.tenantId, data: {} });
       return c.json(updated);
     } catch {

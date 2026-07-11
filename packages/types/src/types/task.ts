@@ -15,12 +15,17 @@ export interface TaskCreate {
   parentId?: string;
   llmCallsBudget?: number;
   maxAttempts?: number;
+  targetDepartment?: string;
+  targetRole?: string;
 }
 
 export interface TaskPatch {
   status?: TaskStatus;
   owner?: string | null;
   output?: string | null;
+  /** Only patched by the clarifying-question resume flow, to append the
+   * human's answer so the next Plan phase sees it as part of the task. */
+  description?: string;
   llmCallsUsed?: number;
   attemptCount?: number;
 }

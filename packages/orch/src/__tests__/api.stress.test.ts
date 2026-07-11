@@ -25,7 +25,7 @@ describe("OrchestratorApi — stress & edge cases", () => {
       emit: (event) => { telemetryEvents.push(event); },
       flush: async () => {},
     };
-    api = new OrchestratorApi({ store, fsm, claimLock, lockManager, telemetry });
+    api = new OrchestratorApi({ store, fsm, claimLock, lockManager, db, telemetry });
   });
 
   function request(path: string, init?: RequestInit) {

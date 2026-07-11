@@ -22,12 +22,20 @@ export class HttpOrchClient implements OrchClient {
     return this.post<Task>(`/tasks/${taskId}/claim`, { agentId });
   }
 
-  async complete(taskId: string, output: string): Promise<void> {
-    await this.post(`/tasks/${taskId}/complete`, { output });
+  async complete(taskId: string, output: string, agentId: string): Promise<void> {
+    await this.post(`/tasks/${taskId}/complete`, { output, agentId });
   }
 
-  async escalate(taskId: string, reason: string): Promise<void> {
-    await this.post(`/tasks/${taskId}/escalate`, { reason });
+  async escalate(taskId: string, reason: string, agentId: string): Promise<void> {
+    await this.post(`/tasks/${taskId}/escalate`, { reason, agentId });
+  }
+
+  async block(taskId: string, dependency: string, agentId: string): Promise<void> {
+    await this.post(`/tasks/${taskId}/block`, { dependency, agentId });
+  }
+
+  async requestInput(taskId: string, question: string, agentId: string): Promise<void> {
+    await this.post(`/tasks/${taskId}/request-input`, { question, agentId });
   }
 
   async recordLlmCall(taskId: string): Promise<{ allowed: boolean; remaining: number }> {

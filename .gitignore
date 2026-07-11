@@ -45,3 +45,6 @@ undefined/
 
 # Runtime scratch
 .sockt/
+
+# Eval trace output — may contain real Slack message content (see evals/README.md)
+evals/traces/

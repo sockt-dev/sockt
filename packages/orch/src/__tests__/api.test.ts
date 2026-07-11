@@ -18,7 +18,7 @@ describe("OrchestratorApi", () => {
     fsm = new FsmEngine(store);
     claimLock = new TaskClaimLock(db);
     lockManager = new LockManager();
-    api = new OrchestratorApi({ store, fsm, claimLock, lockManager });
+    api = new OrchestratorApi({ store, fsm, claimLock, lockManager, db });
   });
 
   function request(path: string, init?: RequestInit) {
@@ -100,6 +100,82 @@ describe("OrchestratorApi", () => {
       const task = await createPendingTask();
       const res = await request(`/tasks/${task.id}/escalate`, json({ reason: "Help", agentId: "agent-1" }));
       expect(res.status).toBe(400);
+    });
+  });
+
+  // ── Task Block (HITL) ──────────────────────────────────────
+
+  describe("POST /tasks/:id/block", () => {
+    test("transitions to blocked and stores dependency", async () => {
+      const task = await createPendingTask();
+      await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-1" }));
+
+      const res = await request(`/tasks/${task.id}/block`, json({ dependency: "HITL denied: exec_code", agentId: "agent-1" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("blocked");
+    });
+
+    test("returns 400 if task not in_progress", async () => {
+      const task = await createPendingTask();
+      const res = await request(`/tasks/${task.id}/block`, json({ dependency: "waiting", agentId: "agent-1" }));
+      expect(res.status).toBe(400);
+    });
+
+    test("blocked task can be retried and re-claimed by a different agent", async () => {
+      // Regression test: /retry previously left `owner` set to the original
+      // claiming agent, and claimStmt requires `status='pending' AND owner IS
+      // NULL` — so a blocked-then-retried task could never actually be
+      // re-claimed by anyone. This path was untested before HITL made
+      // `blocked` reachable.
+      const task = await createPendingTask();
+      await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-1" }));
+      await request(`/tasks/${task.id}/block`, json({ dependency: "HITL denied", agentId: "agent-1" }));
+
+      const retryRes = await request(`/tasks/${task.id}/retry`, { method: "POST" });
+      expect(retryRes.status).toBe(200);
+      const retried = await retryRes.json();
+      expect(retried.status).toBe("pending");
+      expect(retried.owner).toBeNull();
+
+      const reclaimRes = await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-2" }));
+      expect(reclaimRes.status).toBe(200);
+      const reclaimed = await reclaimRes.json();
+      expect(reclaimed.owner).toBe("agent-2");
+    });
+  });
+
+  // ── Task Request Input (clarifying question) ────────────────
+
+  describe("POST /tasks/:id/request-input", () => {
+    test("transitions to blocked and clears owner", async () => {
+      const task = await createPendingTask();
+      await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-1" }));
+
+      const res = await request(`/tasks/${task.id}/request-input`, json({ question: "Which environment?", agentId: "agent-1" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("blocked");
+    });
+
+    test("returns 400 if task not in_progress", async () => {
+      const task = await createPendingTask();
+      const res = await request(`/tasks/${task.id}/request-input`, json({ question: "Which environment?", agentId: "agent-1" }));
+      expect(res.status).toBe(400);
+    });
+
+    test("a blocked task awaiting input can be retried and re-claimed", async () => {
+      const task = await createPendingTask();
+      await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-1" }));
+      await request(`/tasks/${task.id}/request-input`, json({ question: "Which environment?", agentId: "agent-1" }));
+
+      const retryRes = await request(`/tasks/${task.id}/retry`, { method: "POST" });
+      expect(retryRes.status).toBe(200);
+      const retried = await retryRes.json();
+      expect(retried.owner).toBeNull();
+
+      const reclaimRes = await request("/tasks/claim", json({ taskId: task.id, agentId: "agent-2" }));
+      expect(reclaimRes.status).toBe(200);
     });
   });
 

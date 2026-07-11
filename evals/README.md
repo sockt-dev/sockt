@@ -68,3 +68,7 @@ Informed guesses given Sockt's actual architecture, to sensitize the reviewer on
 ## Exit criteria
 
 All 18 test messages + 4 mechanical probes run and labeled; emergent failure categories with counts; a fix-list, an assertion-spec list, and 0-3 named judge candidates with earmarked example traces. That output is the input to the *next* iteration — fix, re-run, and only then start growing toward more traces and judge validation.
+
+## Status since this pass
+
+The fix-first triage list from this pass has been worked through — see the **"Status update — 2026-07-12"** section at the bottom of [test-plan.md](test-plan.md) for what's been fixed, what new capability (HITL approval + clarifying questions) was built as a direct result of the capability-hallucination findings, and what the acceptance-replay plan is. The 20 scored rows and their original verdicts above are left as-recorded — this is not a re-run.

@@ -37,12 +37,12 @@ describe("DepartmentManager", () => {
     const templates = manager.listTemplates();
     expect(templates).toContain("growth");
     expect(templates).toContain("product");
-    expect(templates).toContain("eng-ops");
+    expect(templates).toContain("engops");
     expect(templates).toContain("support");
   });
 
   test("each template has at least one architect and one worker", () => {
-    const templates: DepartmentTemplate[] = ["growth", "product", "eng-ops", "support"];
+    const templates: DepartmentTemplate[] = ["growth", "product", "engops", "support"];
     for (const template of templates) {
       const reg = new AgentRegistry();
       const mgr = new DepartmentManager(reg);

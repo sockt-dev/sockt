@@ -33,7 +33,36 @@ export interface SlackDisconnectFrame {
   reason: string;
 }
 
-export type SlackSocketFrame = SlackEventsApiEnvelope | SlackHelloFrame | SlackDisconnectFrame | { type: string };
+export interface SlackBlockAction {
+  action_id: string;
+  value?: string;
+}
+
+// Payload shape for a Block Kit button click, delivered over Socket Mode as
+// a top-level "interactive" frame (distinct from "events_api"). Slack also
+// supports view_submission/shortcut interactivity — not modeled here since
+// nothing in this codebase uses them yet.
+export interface SlackInteractionPayload {
+  type: "block_actions" | string;
+  user: { id: string; username?: string };
+  channel?: { id: string };
+  message?: { ts: string };
+  actions: SlackBlockAction[];
+  response_url?: string;
+}
+
+export interface SlackInteractiveFrame {
+  type: "interactive";
+  envelope_id: string;
+  payload: SlackInteractionPayload;
+}
+
+export type SlackSocketFrame =
+  | SlackEventsApiEnvelope
+  | SlackHelloFrame
+  | SlackDisconnectFrame
+  | SlackInteractiveFrame
+  | { type: string };
 
 export interface SlackChannel {
   id: string;

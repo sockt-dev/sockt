@@ -31,6 +31,13 @@ export class AgentRegistry {
     return undefined;
   }
 
+  getByDepartmentAndRole(department: string, role: AgentConfig["role"]): AgentConfig | undefined {
+    for (const agent of this.agents.values()) {
+      if (agent.department === department && agent.role === role) return agent;
+    }
+    return undefined;
+  }
+
   listByDepartment(department: string): AgentConfig[] {
     const result: AgentConfig[] = [];
     for (const agent of this.agents.values()) {

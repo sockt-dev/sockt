@@ -92,7 +92,7 @@ export class AgentRunner {
       }
 
       // ── PLAN ──
-      const plan = await planPhase(ctx, this.config.llmClient, this.maxPlanSteps);
+      const plan = await planPhase(ctx, this.config.llmClient, this.maxPlanSteps, this.config.toolRegistry);
       ctx.trace.addStep({
         phase: "plan",
         action: "generate_plan",
@@ -116,6 +116,16 @@ export class AgentRunner {
           return outcome;
         }
         ctx.budgetRemaining = budget.remaining;
+
+        // Clarifying question — not a real tool call (see ask_user.ts): the
+        // agent can't observe a human's answer within this same run, so this
+        // short-circuits the loop instead of going through ACT/OBSERVE.
+        if (step.tool === "ask_user") {
+          const question = String(step.args?.question ?? step.description);
+          const outcome: TaskOutcome = { status: "needs_input", question };
+          ctx.trace.setOutcome(outcome);
+          return outcome;
+        }
 
         // HITL check
         if (step.tool && this.config.toolRegistry.requiresApproval(step.tool)) {
@@ -208,16 +218,31 @@ export class AgentRunner {
       description: description,
     });
 
-    const decision = await this.config.hitlGate.waitForApproval(requestId, 300_000);
-    if (decision.status === "denied") {
-      return { status: "blocked", dependency: `HITL denied: ${tool}` };
+    const timeoutMs = Number(process.env.HITL_TIMEOUT_MS ?? 300_000);
+    const decision = await this.config.hitlGate.waitForApproval(requestId, timeoutMs);
+    // Fail-closed: anything other than an explicit "approved" blocks the tool.
+    // Was `=== "denied"` only, which let a "timeout" decision fall through and
+    // execute the gated tool anyway — a fail-open approval gate is worse than
+    // no gate at all. Found while building out the HITL system (2026-07-12).
+    if (decision.status !== "approved") {
+      return { status: "blocked", dependency: `HITL ${decision.status}: ${tool}` };
     }
 
     return null;
   }
 
   private async onComplete(ctx: ExecutionContext): Promise<void> {
-    if (this.skillCompiler && ctx.trace.isSuccessful()) {
+    // Disabled by default: isSuccessful() only checks FSM status === "completed",
+    // which has no relationship to whether the task's output was truthful. The
+    // 2026-07-11 eval pass found the runner routinely marks fabricated results
+    // (e.g. a claimed "email sent" with no send-email tool ever invoked) as
+    // completed, so compile-on-success was writing hallucinated traces into the
+    // department skill directories as if they were proven execution patterns.
+    // Set SKILL_COMPILE_ENABLED=true only once compilation is gated behind a
+    // real trust signal (human approval or a validated hallucination judge),
+    // not FSM status alone — this env flag is a stopgap, not that gate.
+    const skillCompileEnabled = process.env.SKILL_COMPILE_ENABLED === "true";
+    if (skillCompileEnabled && this.skillCompiler && ctx.trace.isSuccessful()) {
       await this.skillCompiler.compile(ctx.trace).catch(() => {});
     }
   }

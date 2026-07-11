@@ -15,6 +15,8 @@ export const TaskSchema = z.object({
   maxAttempts: z.number().int().positive(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  targetDepartment: z.string().nullable(),
+  targetRole: z.string().nullable(),
 });
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -24,6 +26,8 @@ export const TaskCreateSchema = z.object({
   parentId: z.string().optional(),
   llmCallsBudget: z.number().int().positive().optional(),
   maxAttempts: z.number().int().positive().optional(),
+  targetDepartment: z.string().optional(),
+  targetRole: z.string().optional(),
 });
 export type TaskCreate = z.infer<typeof TaskCreateSchema>;
 
@@ -31,6 +35,7 @@ export const TaskPatchSchema = z.object({
   status: z.enum(TASK_STATUS_VALUES).optional(),
   owner: z.string().nullable().optional(),
   output: z.string().nullable().optional(),
+  description: z.string().optional(),
   llmCallsUsed: z.number().int().nonnegative().optional(),
   attemptCount: z.number().int().nonnegative().optional(),
 });

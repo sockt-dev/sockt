@@ -255,4 +255,32 @@ describe("AgentRunner", () => {
       server.stop();
     }
   });
+
+  test("ask_user step short-circuits to needs_input instead of executing a tool call", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const { askUserDefinition, askUserHandler } = await import("../tools/built-in/ask_user.ts");
+      const toolRegistry = new ToolRegistry();
+      toolRegistry.register(askUserDefinition, askUserHandler);
+
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "Ask which environment to deploy to", "tool": "ask_user", "args": {"question": "Which environment should I deploy to?"}}]}',
+      ]);
+
+      const runner = new AgentRunner({
+        llmClient,
+        toolRegistry,
+        orchBaseUrl: url,
+      });
+
+      const result = await runner.executeTask(mockAgent, mockTask);
+      expect(result.status).toBe("needs_input");
+      if (result.status === "needs_input") {
+        expect(result.question).toBe("Which environment should I deploy to?");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });

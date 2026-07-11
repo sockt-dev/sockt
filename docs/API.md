@@ -135,6 +135,30 @@ Transitions `in_progress → completed`. `400` if task isn't `in_progress`.
 
 Transitions `in_progress → escalated`. `400` if task isn't `in_progress`.
 
+### `POST /tasks/:id/block`
+
+```jsonc
+{ "dependency": "HITL denied: exec_code", "agentId": "..." }
+```
+
+Transitions `in_progress → blocked` and releases the claim lock. `400` if
+task isn't `in_progress`. Not terminal — `blocked → pending` is a legal
+transition (via `/retry` or `/approve`, both of which also clear `owner` so
+the task can actually be re-claimed). See
+[ARCHITECTURE.md#human-in-the-loop-hitl](ARCHITECTURE.md#human-in-the-loop-hitl).
+
+### `POST /tasks/:id/request-input`
+
+```jsonc
+{ "question": "Which environment should I deploy to?", "agentId": "..." }
+```
+
+Like `/block`, but also records the question (`QuestionStore`, shares the
+`pending_human_inputs` table with approvals) so a later threaded Slack reply
+can be matched back to it and treated as an answer rather than a new
+request — see [ARCHITECTURE.md#2-clarifying-questions-ask_user](ARCHITECTURE.md#2-clarifying-questions-ask_user).
+Transitions `in_progress → blocked`. `400` if task isn't `in_progress`.
+
 ### `POST /tasks/:id/cancel`
 
 No body required. Sets status to `cancelled` from any active state. `404` if
@@ -223,9 +247,19 @@ Deregister an agent. `404` if not found, else `{ "ok": true }`.
 
 ## Approvals (HITL)
 
+Backed by SQLite (`ApprovalStore`, shares the `pending_human_inputs` table
+with clarifying questions) — approvals survive an orchestrator restart. A
+30-second sweep marks any approval past its `timeoutAt` as `status: "timeout"`.
+If a `SLACK_APP_TOKEN`/`SLACK_BOT_TOKEN` pair is configured, creating an
+approval also posts a Block Kit approve/deny message to the thread that
+triggered the task (`SlackHitlBridge`) — see
+[ARCHITECTURE.md#1-tool-approval-gate](ARCHITECTURE.md#1-tool-approval-gate).
+
 ### `GET /approvals/pending`
 
-Returns all approvals with `status: "pending"`.
+**Query params:** `tenantId` (required — `400` if missing)
+
+Returns all approvals with `status: "pending"` for that tenant.
 
 ### `POST /approvals`
 
@@ -254,13 +288,15 @@ Get one approval by ID. `404` if not found.
 
 ```jsonc
 {
-  "status": "approved",   // "approved" | "rejected"
-  "decidedBy": "operator@example.com",  // optional
+  "status": "approved",   // "pending" | "approved" | "denied" | "timeout"
+  "decidedBy": "operator@example.com",  // optional — the Slack button flow passes the clicking user's id
   "reason": "..."                        // optional
 }
 ```
 
-`404` if not found.
+Returns the current approval either way — `404` only if the id doesn't exist
+at all. If the approval was already decided (including by the 30s timeout
+sweep), returns its existing state rather than overwriting it.
 
 ---
 

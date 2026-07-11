@@ -2,8 +2,10 @@ import { homedir } from "node:os";
 import { AgentRunner } from "./runner/agent-runner.ts";
 import { HttpOrchClient } from "./orch-client/client.ts";
 import { HttpLlmClient } from "./llm/http-client.ts";
+import { HttpHitlGate } from "./hitl/http-hitl-gate.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { registerBuiltInTools } from "./tools/built-in/index.ts";
+import { getSystemPrompt } from "./prompts/department-prompts.ts";
 import type { AgentConfig, LlmConfig } from "@sockt/types";
 
 // Neither Bun's .env loader nor node:fs expand a leading "~" — left unexpanded,
@@ -37,14 +39,52 @@ const agentConfig: AgentConfig = {
   name: `${department} ${agentRole}`,
   role: agentRole,
   llmConfig,
-  systemPrompt: `You are a ${agentRole} agent in the ${department} department. Complete tasks thoroughly and concisely.`,
+  systemPrompt: getSystemPrompt(department, agentRole),
   tools: ["web_search", "write_file", "read_file", "create_task", "http_request", "exec_code"],
   department,
   maxConcurrentTasks: maxConcurrent,
 };
 
+// See BuiltInToolOptions.currentTaskId — updated before each executeTask() call
+// below so create_task can set the right parentId, and createdByParent — which
+// dedupes repeated create_task calls for the same deliverable across re-plan
+// cycles. Both are only safe because maxConcurrent tasks share one mutable
+// ref/map; guarded below since MAX_CONCURRENT > 1 would race between
+// concurrently-executing tasks on the same worker process.
+if (maxConcurrent > 1) {
+  throw new Error(
+    "MAX_CONCURRENT > 1 is not yet safe: currentTaskId/createdByParent in serve.ts are shared " +
+    "mutable state across concurrently-executing tasks on one worker process and would race. " +
+    "Either fix that (thread task-scoped state through executeTask instead of module-level refs) " +
+    "or keep MAX_CONCURRENT=1.",
+  );
+}
+const currentTaskId: { value?: string } = {};
+const createdByParent = new Map<string, Set<string>>();
+
 const toolRegistry = new ToolRegistry();
-registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id });
+registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, currentTaskId, createdByParent });
+
+// Comma-separated tool names that require human approval before running,
+// e.g. "exec_code,http_request". APPROVAL_REQUIRED_TOOLS always wins when
+// set. Otherwise engops defaults to gating exec_code — arbitrary shell
+// execution against real infra is the highest-blast-radius tool in the
+// registry, and engops is the only department whose prompts (runbooks,
+// deploys, rollbacks) routinely ask for it. Every other department defaults
+// to no gate. Rollout decision from the 2026-07-12 Phase 2 build.
+const defaultApprovalRequiredTools = department === "engops" ? "exec_code" : "";
+const approvalRequiredTools = (process.env.APPROVAL_REQUIRED_TOOLS ?? defaultApprovalRequiredTools)
+  .split(",")
+  .map((t) => t.trim())
+  .filter(Boolean);
+if (approvalRequiredTools.length > 0) {
+  toolRegistry.setApprovalRequired(approvalRequiredTools);
+}
+
+const hitlGate = new HttpHitlGate({
+  baseUrl: orchUrl,
+  pollIntervalMs: Number(process.env.HITL_POLL_INTERVAL_MS ?? 2000),
+});
 
 const llmClient = new HttpLlmClient(llmConfig);
 const orchClient = new HttpOrchClient({ baseUrl: orchUrl });
@@ -69,6 +109,7 @@ const runner = new AgentRunner({
   orchBaseUrl: orchUrl,
   skillsDir,
   traceLogPath: traceLogPath || undefined,
+  hitlGate,
 });
 
 // Self-register with orchestrator (retry until orch is ready)
@@ -95,7 +136,15 @@ while (true) {
   try {
     if (activeTasks < maxConcurrent) {
       const pending = await orchClient.listPending(deploymentId);
-      for (const task of pending) {
+      const claimable = pending.filter((t) => {
+        if (t.targetDepartment && t.targetRole) {
+          return t.targetDepartment === department && t.targetRole === agentRole;
+        }
+        // Untagged tasks (e.g. architect-created subtasks) go to workers only,
+        // so architects never grab their own subtasks meant for a worker skill.
+        return agentRole === "worker";
+      });
+      for (const task of claimable) {
         if (activeTasks >= maxConcurrent) break;
         activeTasks++;
         // Execute concurrently without blocking the poll loop
@@ -103,21 +152,29 @@ while (true) {
           try {
             const claimed = await orchClient.claim(task.id, agentConfig.id);
             console.log(`[runtime] claimed task=${task.id}`);
+            currentTaskId.value = claimed.id;
             const outcome = await runner.executeTask(agentConfig, claimed);
             if (outcome.status === "completed") {
-              await orchClient.complete(task.id, outcome.output);
+              await orchClient.complete(task.id, outcome.output, agentConfig.id);
               console.log(`[runtime] completed task=${task.id}`);
             } else if (outcome.status === "escalated") {
-              await orchClient.escalate(task.id, outcome.reason);
+              await orchClient.escalate(task.id, outcome.reason, agentConfig.id);
               console.log(`[runtime] escalated task=${task.id} reason=${outcome.reason}`);
+            } else if (outcome.status === "blocked") {
+              await orchClient.block(task.id, outcome.dependency, agentConfig.id);
+              console.log(`[runtime] blocked task=${task.id} dependency=${outcome.dependency}`);
+            } else if (outcome.status === "needs_input") {
+              await orchClient.requestInput(task.id, outcome.question, agentConfig.id);
+              console.log(`[runtime] needs_input task=${task.id} question=${outcome.question}`);
             }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             if (!msg.includes("unavailable") && !msg.includes("409")) {
               console.error(`[runtime] task=${task.id} error: ${msg}`);
-              try { await orchClient.escalate(task.id, msg); } catch {}
+              try { await orchClient.escalate(task.id, msg, agentConfig.id); } catch {}
             }
           } finally {
+            createdByParent.delete(task.id);
             activeTasks--;
           }
         })();

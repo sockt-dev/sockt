@@ -17,7 +17,8 @@ import type { ToolRegistry } from "./tools/registry.ts";
 export type TaskOutcome =
   | { status: "completed"; output: string }
   | { status: "escalated"; reason: string }
-  | { status: "blocked"; dependency: string };
+  | { status: "blocked"; dependency: string }
+  | { status: "needs_input"; question: string };
 
 // ─── Execution Context ───────────────────────────────────────────────────────
 

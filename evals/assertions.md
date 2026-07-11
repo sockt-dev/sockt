@@ -8,7 +8,23 @@ Format: one row per candidate, referencing the trace file(s) that surfaced it.
 
 | Failure mode | Check | Example trace(s) | Status |
 |---|---|---|---|
-| _(none yet — populate during test-plan.md synthesis)_ | | | |
+| Outreach copy (growth) — over word limit | reject if word count > 150 | G2 (~220 words) | Confirmed |
+| PRD (product) — missing Non-Goals | reject if no `## Non-Goals` section present | P1 (missing Problem/Users/Goals/Non-Goals/Acceptance-Criteria entirely) | Confirmed |
+| Runbook (engops) — missing Rollback | reject if no `## Rollback` section present | E1 (zero mentions of "rollback" anywhere in the trace) | Confirmed |
+| Any task — budget guard bypass | reject if `llmCallsUsed >= llmCallsBudget` and status is not `escalated` | Not observed this pass — every near-budget-exhaustion task did correctly transition to `escalated` or `completed` via the runner's max-attempts logic; keep as a watch item, not yet a confirmed failure | Not yet observed |
+| Multi-step message — no decomposition | flag if architect task has zero child tasks | G3, P3, E3 — **3/3 multi-step rows, 100% failure rate** | Confirmed, systemic |
+| Slack-sourced task — no matching reply | flag if `task_completed`/`task_escalated` fired but no Slack reply observed within N minutes | Not observed as a failure — reply-telemetry consistently posted a reply for every task across the whole pass. The real reply-side issues found were different: duplicate replies (see below) and replies that are unformatted walls of raw agent narration | Not observed (this specific form) |
+| New: duplicate task per Slack message | flag if two tasks are created with the same tenantId within a few hundred ms of each other from `source: "message"` telemetry, no idempotency key on inbound `event.ts` | Nearly every row (G1-G5, P1-P5 except one, E1-E6, R1/R3/R4) — the single highest-frequency defect of the whole pass | Confirmed, systemic |
+| New: capability hallucination | flag output text matching action-completion phrasing ("sent", "restarted", "authenticated", "tested successfully", "connection established") when no corresponding tool call for that capability exists in the trace | G2, G5, P5, E1, E4, E5, E6 | Confirmed, 7+ occurrences |
+| New: tool name never matches registry | flag any `[act]` step whose `tool` field is non-null and non-empty but doesn't match a registered tool name | Present in nearly every trace (e.g. E4's "Python" instead of `exec_code`) | Confirmed, systemic — root cause of most other findings |
+| New: edited Slack message creates a second task | flag if a task is created from an `event.ts` that Slack marks as an edit of a previously-seen message | M2 probe (`019f520b-8f39-77a2-ae3f-3b9f5008764b`) | Confirmed |
+
+## Status since this pass (2026-07-12)
+
+The root causes behind several rows above were fixed directly rather than turned into a permanent code-check — see [test-plan.md](test-plan.md)'s "Status update" section for the fixes. These two checks in particular are worth keeping as regression guards even though the underlying bug is fixed, since a future prompt/model change could reintroduce either failure mode silently:
+
+- **Tool name never matches registry** — now much less likely to recur (plan.ts grounds and drops invalid names before they reach `act.ts`), but still worth an occasional check against `traces.jsonl` for any `[act]` step with a non-null `tool` field that isn't a registered name.
+- **New: capability hallucination** — not fixed by tool-grounding alone (the model can still narrate a false success even when its plan correctly names a real tool it just didn't call). This is the primary motivation for the Phase 2 `ask_user`/HITL build in test-plan.md — worth re-running this specific check against the P4/P5/G5 acceptance-replay traces once captured.
 
 ## Starter candidates anticipated by the plan (not yet confirmed against real traces)
 

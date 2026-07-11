@@ -50,6 +50,9 @@ variables automatically when it spawns services via `sockt deploy`.
 | `LLM_CALL_DELAY_MS` | `0` | runtime | Forced delay between LLM calls. Set to `3000` on Groq's free tier to avoid 429s |
 | `PLAN_CONTEXT_MESSAGES` | `0` | runtime | How many prior messages to include in the plan phase. `0` = system prompt only (token-efficient default) |
 | `SKILLS_DIR` | auto-resolved from `DEPARTMENT` | runtime | Path to `.skill` JSON files this agent can draw on. See [DEPARTMENTS.md](DEPARTMENTS.md) |
+| `APPROVAL_REQUIRED_TOOLS` | `exec_code` if `DEPARTMENT=engops`, else unset (no gate) | runtime | Comma-separated tool names that require human approval before running. Set explicitly (including `""` to force no gate) to override the department default — e.g. gate other tools/departments, or un-gate engops. See [ARCHITECTURE.md#human-in-the-loop-hitl](ARCHITECTURE.md#human-in-the-loop-hitl) |
+| `HITL_TIMEOUT_MS` | `300000` (5 min) | runtime | How long `AgentRunner` waits for an approval decision before treating it as a timeout (fail-closed — the gated tool does not run) |
+| `HITL_POLL_INTERVAL_MS` | `2000` | runtime | How often `HttpHitlGate` polls orch for a decision while waiting |
 
 ### Tuning for rate-limited free-tier LLMs (e.g. Groq)
 

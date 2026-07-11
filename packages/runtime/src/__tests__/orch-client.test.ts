@@ -32,6 +32,9 @@ describe("HttpOrchClient", () => {
         if (url.pathname.endsWith("/escalate")) {
           return new Response(null, { status: 204 });
         }
+        if (url.pathname.endsWith("/block")) {
+          return new Response(null, { status: 204 });
+        }
         if (url.pathname.endsWith("/record-llm-call")) {
           return Response.json({ allowed: true, remaining: 99 });
         }
@@ -63,22 +66,34 @@ describe("HttpOrchClient", () => {
     expect(task.owner).toBe("agent-1");
   });
 
-  test("complete sends POST to /tasks/:id/complete", async () => {
+  test("complete sends POST to /tasks/:id/complete with agentId (releases the right lock)", async () => {
     const client = new HttpOrchClient({ baseUrl });
-    await client.complete("task-1", "done");
+    await client.complete("task-1", "done", "agent-1");
 
     expect(lastRequest!.method).toBe("POST");
     expect(lastRequest!.path).toBe("/tasks/task-1/complete");
     expect(lastRequest!.body.output).toBe("done");
+    expect(lastRequest!.body.agentId).toBe("agent-1");
   });
 
-  test("escalate sends POST to /tasks/:id/escalate", async () => {
+  test("escalate sends POST to /tasks/:id/escalate with agentId", async () => {
     const client = new HttpOrchClient({ baseUrl });
-    await client.escalate("task-1", "too complex");
+    await client.escalate("task-1", "too complex", "agent-1");
 
     expect(lastRequest!.method).toBe("POST");
     expect(lastRequest!.path).toBe("/tasks/task-1/escalate");
     expect(lastRequest!.body.reason).toBe("too complex");
+    expect(lastRequest!.body.agentId).toBe("agent-1");
+  });
+
+  test("block sends POST to /tasks/:id/block with dependency and agentId", async () => {
+    const client = new HttpOrchClient({ baseUrl });
+    await client.block("task-1", "HITL denied: exec_code", "agent-1");
+
+    expect(lastRequest!.method).toBe("POST");
+    expect(lastRequest!.path).toBe("/tasks/task-1/block");
+    expect(lastRequest!.body.dependency).toBe("HITL denied: exec_code");
+    expect(lastRequest!.body.agentId).toBe("agent-1");
   });
 
   test("recordLlmCall returns budget info", async () => {

@@ -127,7 +127,13 @@ describe("Integration: Full PAOR Loop", () => {
     expect(recordedCalls).toBe(2);
   });
 
-  test("skill files are written after successful execution", async () => {
+  test("skill compile-on-success is disabled (isSuccessful only reflects FSM status, not truthfulness)", async () => {
+    // Was "skill files are written after successful execution" — compile-on-success
+    // is intentionally disabled (see agent-runner.ts onComplete) after the
+    // 2026-07-11 eval pass found it was writing hallucinated task outputs into
+    // department skill directories as if they were proven execution patterns,
+    // since `isSuccessful()` only checks FSM status === "completed" and has no
+    // relationship to whether the output was actually truthful.
     budgetRemaining = 50;
 
     const toolRegistry = new ToolRegistry();
@@ -153,11 +159,7 @@ describe("Integration: Full PAOR Loop", () => {
     const glob = new Bun.Glob("*.skill");
     const files: string[] = [];
     for await (const f of glob.scan(skillsDir)) files.push(f);
-    expect(files.length).toBeGreaterThanOrEqual(1);
-
-    const content = await Bun.file(`${skillsDir}/${files[0]}`).json();
-    expect(content.steps.length).toBeGreaterThanOrEqual(1);
-    expect(content.steps[0].tool).toBe("search");
+    expect(files.length).toBe(0);
   });
 
   test("budget exhaustion mid-execution escalates cleanly", async () => {

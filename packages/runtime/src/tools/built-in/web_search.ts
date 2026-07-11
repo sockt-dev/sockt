@@ -18,14 +18,44 @@ export const webSearchHandler: ToolHandler = async (args) => {
   const query = String(args.query ?? "");
   const limit = Number(args.limit ?? 5);
 
-  // Brave Search if API key set, otherwise DuckDuckGo instant answers
+  // Tavily first if configured — built for agent/LLM search (real ranked
+  // results with content snippets), not just instant-answer lookups. Brave
+  // next if configured. DuckDuckGo instant-answers last: it isn't a real
+  // search API (no ranked web results, just Wikipedia-style abstracts), so it
+  // returns empty for most real queries — this was silently starving every
+  // growth web_search call before Tavily was configured (see G1 in the
+  // 2026-07-11 eval: 9 real web_search calls, 0 usable results).
+  const tavilyKey = process.env.TAVILY_API_KEY;
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
 
+  if (tavilyKey) {
+    return searchTavily(query, limit, tavilyKey);
+  }
   if (braveKey) {
     return searchBrave(query, limit, braveKey);
   }
   return searchDuckDuckGo(query, limit);
 };
+
+async function searchTavily(query: string, limit: number, apiKey: string) {
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ query, max_results: limit }),
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (!res.ok) throw new Error(`Tavily Search error: ${res.status}`);
+  const data = await res.json() as { results?: { title: string; url: string; content: string }[] };
+
+  const results = (data.results ?? []).slice(0, limit).map(r => ({
+    title: r.title,
+    url: r.url,
+    snippet: r.content,
+  }));
+
+  return { query, results, source: "tavily" };
+}
 
 async function searchBrave(query: string, limit: number, apiKey: string) {
   const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`;

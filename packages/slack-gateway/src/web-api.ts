@@ -31,13 +31,23 @@ export async function openSocketModeConnection(appToken: string): Promise<string
   return result.url;
 }
 
-/** chat.postMessage — sends a message, optionally threaded. Returns the message ts (used as message id). */
+/** chat.postMessage — sends a message, optionally threaded and/or with Block Kit
+ * blocks (e.g. approve/deny buttons). Returns the message ts (used as message id). */
 export async function postMessage(
   botToken: string,
-  params: { channel: string; text: string; thread_ts?: string },
+  params: { channel: string; text: string; thread_ts?: string; blocks?: unknown[] },
 ): Promise<string> {
   const result = await callSlackApi<{ ts: string }>("chat.postMessage", botToken, params);
   return result.ts;
+}
+
+/** chat.update — edits an existing message in place, e.g. to replace approve/deny
+ * buttons with a "decided" state once someone clicks one. */
+export async function updateMessage(
+  botToken: string,
+  params: { channel: string; ts: string; text: string; blocks?: unknown[] },
+): Promise<void> {
+  await callSlackApi("chat.update", botToken, params);
 }
 
 /** conversations.list — channels the bot can see. */

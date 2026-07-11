@@ -49,6 +49,8 @@ const validTask = {
   maxAttempts: 3,
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
+  targetDepartment: null,
+  targetRole: null,
 };
 
 const validMemoryEntry = {
