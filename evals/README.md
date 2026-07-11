@@ -11,6 +11,7 @@ Plan authored following the [hamelsmu/evals-skills](https://github.com/hamelsmu/
 | [test-plan.md](test-plan.md) | The 18 test messages + 4 mechanical probes, as a results-log checklist |
 | [assertions.md](assertions.md) | Code-check candidates nominated during review — tier (b) in the fix-first triage below |
 | `trace-capture.ts` | Pulls task state + execution trace for one task, writes a markdown trace file |
+| `check.ts` | Phase 3 addition (2026-07-12) — runs the confirmed code-checks from assertions.md (tool-name-grounding, capability hallucination) over all of `traces.jsonl` as a cheap CI-friendly regression guard. `bun run evals/check.ts` |
 | `traces/` | Output directory — one file per test run, git-ignored (traces may contain real Slack content) |
 
 ## What "trace" means here

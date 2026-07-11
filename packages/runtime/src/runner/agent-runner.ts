@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import type { AgentConfig, LlmConfig, LlmRequest, ModelSelector, ModelSelectionContext, Task } from "@sockt/types";
 import { HttpOrchClient } from "../orch-client/client.ts";
 import { SkillCompiler } from "../skills/compiler.ts";
+import { hasUnbackedCapabilityClaim } from "../skills/hallucination-check.ts";
 import type { AgentRunnerConfig, ExecutionContext, TaskOutcome } from "../types.ts";
 import { buildExecutionContext, injectSkillContext } from "./context.ts";
 import { planPhase } from "./plan.ts";
@@ -239,10 +240,15 @@ export class AgentRunner {
     // completed, so compile-on-success was writing hallucinated traces into the
     // department skill directories as if they were proven execution patterns.
     // Set SKILL_COMPILE_ENABLED=true only once compilation is gated behind a
-    // real trust signal (human approval or a validated hallucination judge),
-    // not FSM status alone — this env flag is a stopgap, not that gate.
+    // real trust signal — as of Phase 3.1 (2026-07-12), that trust signal is
+    // hasUnbackedCapabilityClaim(), the same code-checkable capability-
+    // hallucination pattern evals/check.ts runs offline over traces.jsonl.
+    // This is NOT the validated LLM judge the eval pass nominated (that still
+    // doesn't exist — see the Phase 3 status note in evals/test-plan.md) —
+    // it only catches the narrow, regex-detectable half of that finding, not
+    // subtler hallucinations a judge would need to catch.
     const skillCompileEnabled = process.env.SKILL_COMPILE_ENABLED === "true";
-    if (skillCompileEnabled && this.skillCompiler && ctx.trace.isSuccessful()) {
+    if (skillCompileEnabled && this.skillCompiler && ctx.trace.isSuccessful() && !hasUnbackedCapabilityClaim(ctx.trace)) {
       await this.skillCompiler.compile(ctx.trace).catch(() => {});
     }
   }
