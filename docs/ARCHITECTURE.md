@@ -223,10 +223,13 @@ Key points:
   separate events — a `message` event and an `app_mention` event — for one
   `@sockt` message, both carrying the same `ts`; without this, that alone
   produced two tasks per human send in ~17/20 rows of the first eval pass
-  (see [evals/test-plan.md](../evals/test-plan.md)). Does not cover message
-  *edits* creating a duplicate task — that's a separate, still-open bug (see
-  test-plan.md's M2 probe), since an edit's event carries a different `ts`
-  than the original
+  (see [evals/test-plan.md](../evals/test-plan.md)). Message *edits* creating
+  a duplicate task (a separate bug — an edit's event carries a different `ts`
+  than the original, so the dedup above doesn't catch it) is handled by a
+  second check in `toInboundMessage`: any event carrying a nested
+  `message`/`previous_message` field (the shape of a `message_changed`
+  envelope) is filtered regardless of its `subtype`. Fixed and live-verified
+  2026-07-12 — see test-plan.md's M2 probe and its Phase 3 status update
 - The task → Slack-destination correlation is cached in `SlackReplyTelemetry`,
   in memory, keyed by `taskId`, populated from the `task_created` telemetry
   event's `data.channelId`/`data.threadId`/`data.platform` fields (set in

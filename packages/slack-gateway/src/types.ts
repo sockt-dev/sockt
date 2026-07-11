@@ -11,6 +11,14 @@ export interface SlackMessageEvent {
   bot_id?: string;
   subtype?: string;
   files?: { url_private?: string; name?: string; mimetype?: string }[];
+  // Present on message_changed (edit) events — the edited content lives
+  // nested here, under the *original* message's ts, while the envelope's own
+  // top-level `ts` is the edit event's own ts (a different value). Checked
+  // defensively in toInboundMessage() in addition to the subtype check —
+  // the 2026-07-11 eval pass (M2 probe) found an edited message still
+  // created a task despite the subtype filter, root cause never confirmed.
+  message?: { ts?: string; text?: string; user?: string };
+  previous_message?: unknown;
 }
 
 export interface SlackEventsApiEnvelope {

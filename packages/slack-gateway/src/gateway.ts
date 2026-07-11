@@ -177,6 +177,13 @@ export class SlackChannelGateway implements ChannelGateway {
   private toInboundMessage(event: SlackMessageEvent): InboundMessage | null {
     if (event.bot_id) return null; // never react to bot messages (avoids reply loops)
     if (event.subtype && event.subtype !== "") return null; // skip edits/deletes/joins/etc
+    // Defensive second check: a message_changed (edit) envelope nests the
+    // actual content under `message`/`previous_message` regardless of what
+    // subtype string (if any) Slack sent at the top level. The 2026-07-11
+    // eval pass (M2 probe) found an edit still created a task despite the
+    // subtype filter above — root cause was never confirmed, so this
+    // mitigates by content shape rather than assuming subtype is reliable.
+    if (event.message || event.previous_message) return null;
     if (!event.user || !event.text) return null;
     if (this.isDuplicateEvent(event.channel, event.ts)) return null;
 

@@ -74,3 +74,32 @@ describe("SlackChannelGateway event dedup", () => {
     expect(replay).not.toBeNull();
   });
 });
+
+describe("SlackChannelGateway message_changed (edit) filtering — M2 mitigation", () => {
+  test("an event with a nested message field (edit envelope) is filtered even without a subtype", () => {
+    const gateway = new SlackChannelGateway({ appToken: "xapp", botToken: "xoxb", tenantId: "t1" });
+
+    const edited = toInbound(gateway, baseEvent({
+      subtype: undefined,
+      message: { ts: "1700000000.000050", text: "edited text", user: "U1" },
+    }));
+
+    expect(edited).toBeNull();
+  });
+
+  test("an event with a previous_message field (edit envelope) is filtered even without a subtype", () => {
+    const gateway = new SlackChannelGateway({ appToken: "xapp", botToken: "xoxb", tenantId: "t1" });
+
+    const edited = toInbound(gateway, baseEvent({
+      subtype: undefined,
+      previous_message: { ts: "1700000000.000050", text: "original text" },
+    }));
+
+    expect(edited).toBeNull();
+  });
+
+  test("a normal message with neither field still comes through", () => {
+    const gateway = new SlackChannelGateway({ appToken: "xapp", botToken: "xoxb", tenantId: "t1" });
+    expect(toInbound(gateway, baseEvent())).not.toBeNull();
+  });
+});

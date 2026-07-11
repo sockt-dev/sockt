@@ -169,3 +169,18 @@ See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the full design.
 | E4 (engops `exec_code`) | `APPROVAL_REQUIRED_TOOLS` gate fired automatically. A real Block Kit Approve/Deny message posted to the thread. First click landed after `HITL_TIMEOUT_MS` (5 min) had already passed — confirmed **fail-closed**: task stayed `blocked`, `exec_code` never ran, even though the approval was eventually granted. Retried and approved within the window on a second pass — task correctly progressed past the gate (`llmCallsUsed` advanced, `in_progress`). |
 
 Also directly observed live during this replay (not new bugs — the same duplicate-task-per-send pattern the (a) dedup fix above targets, and the pre-existing `create_task` empty-description issue the reflect-prompt retry-nudge in `reflect.ts` targets): both were still present in this run since the fixes for them landed *after* the replay, not before. Not re-replayed after those two fixes given time — worth a follow-up spot-check.
+
+---
+
+## Status update — 2026-07-12 (later): Phase 3.3 (security floor) and the M2 fix, live-verified
+
+**M2 (edit-triggers-duplicate-task) is now confirmed fixed.** `SlackMessageEvent` gained `message`/`previous_message` fields, and `toInboundMessage` now filters on their presence regardless of what `subtype` string (if any) Slack sends — see `packages/slack-gateway/src/gateway.ts`. Live retest, same steps as the original M2 probe: sent `@sockt M2-PHASE3 probe original text` (1 task created — the channel:ts dedup fix from earlier in this doc also confirmed still holding), then edited it in place to `@sockt M2-PHASE3 probe EDITED text` via Slack's Edit message menu. **No third task was created** — `GET /tasks?tenantId=default` shows only the original task, still holding the original (pre-edit) text. This closes the last open item from (a)'s duplicate-task-creation fix.
+
+**Phase 3.3 (sbx enforcement + orch auth) also shipped:**
+- Found `sbx` was registered in `winget list` but had zero files anywhere on disk — a broken prior install. Reinstalled properly (`winget uninstall` + `winget install --id Docker.sbx -e`); the binary now runs (`sbx ls --json` correctly reports "Not authenticated to Docker" rather than not existing).
+- `checkSbxAvailable()` was crashing (unhandled `ENOENT`) instead of returning `false` when `sbx` wasn't on PATH at all — found while adding the first real `exec_code` tests, fixed.
+- `execInTempDir`'s cleanup used `Bun.spawn(["rm", "-rf", dir])`, which isn't guaranteed to resolve on Windows even with Git installed — replaced with `node:fs/promises rm()`.
+- Added `EXEC_CODE_REQUIRE_SANDBOX` (default `true` for engops) — `exec_code` now refuses outright rather than silently running unsandboxed when the sandbox isn't available, so an approved gated call means what it looks like it means.
+- Added opt-in `ORCH_API_TOKEN` bearer auth on the orchestrator API, addressing the "no authentication by default" item in SECURITY.md.
+
+Not yet done from the Phase 3 pitch: the hallucination judge (3.1), a full 20-row eval re-run (3.2), and cross-department task routing (3.4).
