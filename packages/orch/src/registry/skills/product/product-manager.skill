@@ -18,6 +18,10 @@
     "Success metrics defined upfront — not just output metrics but leading indicators",
     "Decisions documented with tradeoffs acknowledged"
   ],
+  "checks": [
+    { "criterion": "Every recommendation has a RICE score or equivalent prioritisation rationale", "type": "regex_present", "pattern": "reach[\\s\\S]{0,300}impact[\\s\\S]{0,300}confidence[\\s\\S]{0,300}effort", "flags": "i", "message": "RICE components (Reach/Impact/Confidence/Effort) must all be shown, not just a final score" },
+    { "criterion": "Decisions documented with tradeoffs acknowledged", "type": "human_review" }
+  ],
   "compiledFrom": "Digidai/product-manager-skills@product-manager + rshankras/claude-code-apple-skills@product-development",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

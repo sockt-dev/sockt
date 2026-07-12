@@ -20,6 +20,10 @@
     "Fix tested and validated — not just applied and hoped",
     "Prevention measure identified to stop recurrence"
   ],
+  "checks": [
+    { "criterion": "Root cause confirmed from at least 2 independent data sources", "type": "evidence_citation", "claimPattern": "root cause|caused by|due to", "minOverlapTokens": 4 },
+    { "criterion": "Prevention measure identified to stop recurrence", "type": "regex_present", "pattern": "prevent", "flags": "i", "severity": "warn" }
+  ],
   "compiledFrom": "community/devops-troubleshooter + 404kidwiz/claude-supercode-skills@devops-incident-responder",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

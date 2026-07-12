@@ -18,6 +18,12 @@
     "The 'keep cancelling' option stays visible — no dark patterns",
     "Dunning sequence has escalating urgency across at least 3 emails with a direct payment-update link"
   ],
+  "checks": [
+    { "criterion": "Offers are matched to stated cancel reasons, not a single blanket discount", "type": "human_review" },
+    { "criterion": "Discount depth stays in the 20-30% range (50%+ trains customers to churn for deals)", "type": "human_review" },
+    { "criterion": "The 'keep cancelling' option stays visible — no dark patterns", "type": "human_review" },
+    { "criterion": "Dunning sequence has escalating urgency across at least 3 emails with a direct payment-update link", "type": "human_review" }
+  ],
   "compiledFrom": "coreyhaines31/marketingskills@churn-prevention",
   "compiledAt": "2026-07-12T00:00:00.000Z"
 }

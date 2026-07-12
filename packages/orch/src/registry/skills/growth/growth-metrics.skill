@@ -17,6 +17,11 @@
     "K-factor calculated with component breakdown",
     "At least 3 prioritised experiments with measurable hypotheses"
   ],
+  "checks": [
+    { "criterion": "K-factor calculated with component breakdown", "type": "computed_number", "labelPattern": "k[- ]?factor" },
+    { "criterion": "All AARRR stages have a metric and a current value", "type": "regex_present", "pattern": "acquisition[\\s\\S]*activation[\\s\\S]*retention[\\s\\S]*revenue[\\s\\S]*referral", "flags": "i" },
+    { "criterion": "At least 3 prioritised experiments with measurable hypotheses", "type": "count_range", "pattern": "experiment", "flags": "gi", "min": 3 }
+  ],
   "compiledFrom": "community/growth-engine + aradotso/marketing-skills@seo-content-marketing-skills",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

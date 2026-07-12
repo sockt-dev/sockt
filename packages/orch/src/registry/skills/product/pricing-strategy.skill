@@ -16,6 +16,11 @@
     "Every price point has a stated reason (data or explicit assumption) — no invented 'confirmed via internal data' claims",
     "Packaging clearly shows what's gained/lost moving between tiers"
   ],
+  "checks": [
+    { "criterion": "A single named value metric is chosen and justified", "type": "human_review" },
+    { "criterion": "Every price point has a stated reason (data or explicit assumption) — no invented 'confirmed via internal data' claims", "type": "human_review" },
+    { "criterion": "Packaging clearly shows what's gained/lost moving between tiers", "type": "human_review" }
+  ],
   "compiledFrom": "coreyhaines31/marketingskills@pricing",
   "compiledAt": "2026-07-12T00:00:00.000Z"
 }

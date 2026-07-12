@@ -12,6 +12,8 @@ import { actPhase } from "./act.ts";
 import type { ActResult } from "./act.ts";
 import { observePhase } from "./observe.ts";
 import { reflectPhase } from "./reflect.ts";
+import { preflightCheck } from "./preflight.ts";
+import { isReadOnlyExec } from "../hitl/readonly-allowlist.ts";
 
 // Must match packages/orch/src/join/parent-join.ts's constants of the same
 // name exactly — runtime has no package dependency on orch (communication
@@ -183,6 +185,16 @@ export class AgentRunner {
   private async runLoop(ctx: ExecutionContext): Promise<TaskOutcome> {
     const { agent, task, signal } = ctx;
 
+    // Before any LLM call: a task this agent cannot honestly attempt (e.g.
+    // growth lead-gen with no search API configured) asks a human instead
+    // of guessing or inventing data that verification/checks.ts would only
+    // catch after the fact. See runner/preflight.ts.
+    const preflight = preflightCheck(agent, task);
+    if (preflight) {
+      ctx.trace.setOutcome(preflight);
+      return preflight;
+    }
+
     if (this.skillCompiler) {
       const skills = await this.skillCompiler.findRelevant(task.description, 3);
       ctx.matchedSkills = skills;
@@ -230,10 +242,22 @@ export class AgentRunner {
           return outcome;
         }
 
-        // HITL check
-        if (step.tool && this.config.toolRegistry.requiresApproval(step.tool)) {
-          const hitlResult = await this.checkHitlApproval(ctx, step.tool, step.description);
+        // HITL check — a read-only exec_code snippet (e.g. `kubectl get pods`,
+        // `git log`) skips the gate entirely: it can't mutate anything, and
+        // routing every diagnostic command through a human approval queue
+        // just trains people to rubber-stamp without reading. Fail-closed —
+        // isReadOnlyExec only returns true for a narrow, explicit allowlist.
+        if (step.tool && this.config.toolRegistry.requiresApproval(step.tool) && !isReadOnlyExec(step.tool, step.args ?? {})) {
+          const hitlResult = await this.checkHitlApproval(ctx, step.tool, step.description, step.args);
           if (hitlResult) return hitlResult;
+        } else if (step.tool && this.config.toolRegistry.requiresApproval(step.tool)) {
+          ctx.trace.addStep({
+            phase: "act",
+            action: "hitl_bypass_readonly",
+            output: { tool: step.tool },
+            durationMs: 0,
+            timestamp: new Date().toISOString(),
+          });
         }
 
         // ACT
@@ -331,16 +355,24 @@ export class AgentRunner {
     return outcome;
   }
 
-  private async checkHitlApproval(ctx: ExecutionContext, tool: string, description: string): Promise<TaskOutcome | null> {
+  private async checkHitlApproval(ctx: ExecutionContext, tool: string, description: string, args?: Record<string, unknown>): Promise<TaskOutcome | null> {
     if (!this.config.hitlGate) return null;
 
+    // Include the actual tool call args so the human reviewing in Slack sees
+    // what would run, not just the plan step's free-text description — a
+    // step like "run the migration script" tells a reviewer nothing about
+    // which script or what flags. Capped so a large exec_code payload
+    // doesn't blow out the Slack message.
+    const argsSuffix = args && Object.keys(args).length > 0
+      ? `\n\`\`\`${JSON.stringify(args, null, 0).slice(0, 500)}\`\`\``
+      : "";
     const requestId = await this.config.hitlGate.requestApproval({
       tenantId: ctx.task.tenantId,
       agentId: ctx.agent.id,
       taskId: ctx.task.id,
       tier: "confirm",
       action: tool,
-      description: description,
+      description: `${description}${argsSuffix}`,
     });
 
     const timeoutMs = Number(process.env.HITL_TIMEOUT_MS ?? 300_000);

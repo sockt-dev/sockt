@@ -19,6 +19,10 @@
     "No implementation details prescribed — what not how",
     "Out of scope section prevents unbounded scope"
   ],
+  "checks": [
+    { "criterion": "Out of scope section prevents unbounded scope", "type": "section_present", "heading": "Out of Scope", "minChars": 10 },
+    { "criterion": "Acceptance criteria are testable and specific", "type": "regex_present", "pattern": "given[\\s\\S]{0,200}when[\\s\\S]{0,200}then", "flags": "i" }
+  ],
   "compiledFrom": "community/github-issue-creator + neolabhq/context-engineering-kit@attach-review-to-pr",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

@@ -312,3 +312,72 @@ skills (lead-generation, growth-metrics, product-manager, user-research,
 github-issues, devops-troubleshooter), and the product-department
 metric-sourcing built-in (spec §3.2 — distinct from the capability-claim
 built-in shipped here).
+
+## Status update — 2026-07-13: production-hardening Phases 3, 4, 5 shipped (spec complete)
+
+Closes out the remaining scope from the Fable spec's own §8 rollout order —
+all five phases are now implemented.
+
+**Phase 3 — department-specific evaluators (depends on Phase 2):**
+
+- Five new `SkillCheck` evaluators in `verification/checks.ts`:
+  `lead_provenance` (growth — every lead traceable to a real search/HTTP
+  result), `computed_number` (growth — a stated metric must actually come
+  from an `exec_code` run, not just sound plausible), `metric_sourcing`
+  (product — every bare metric claim cites a tool result, input data, or an
+  explicit `ASSUMPTION:` label; also runs as an always-on department-wide
+  built-in, not just via a skill's `checks`), `grounded_quotes` (product —
+  research synthesis must quote real input feedback, downgrading to a
+  warning when the input had none to quote), `evidence_citation` (engops —
+  causal claims need supporting tokens from the input/tool evidence, not
+  invented log lines).
+- `checks[]` authored for all remaining bundled skills — the six with real
+  evaluators available (lead-generation, growth-metrics, product-manager,
+  user-research, github-issues, devops-troubleshooter) and the seven without
+  yet (email-sequence, churn-prevention, seo-content-audit,
+  social-hook-writing, pricing-strategy, onboarding-activation,
+  deployment-engineer — all `human_review` for now). All 17 skills now have
+  a `checks` array.
+- `runner/preflight.ts` — a growth lead-gen task with no search API key
+  configured now asks a clarifying question before any LLM call, instead of
+  reaching generation and having to be caught after the fact.
+
+**Phase 4 — real actions behind existing HITL (independent of 2/3):**
+
+- `github_create_issue` tool — files a real GitHub issue via the REST API,
+  conditionally registered only when `GITHUB_TOKEN`/`GITHUB_REPO` are both
+  set. `product` now defaults to gating it through `APPROVAL_REQUIRED_TOOLS`.
+  Approval descriptions sent to Slack now include the actual tool call args,
+  not just the plan step's free-text description.
+
+**Phase 5 — HITL ergonomics (independent; touches only orch + one runner line):**
+
+- Reminder ping before an approval times out (`ApprovalStore.sweepReminders`,
+  `SlackHitlBridge.postReminder`).
+- Re-request-after-timeout: a timed-out approval message now offers a
+  button that re-queues the task so a fresh approval gets requested through
+  the normal flow (`SlackHitlBridge.postTimeoutNotice` + `onRerequest`).
+- Read-only `exec_code` allowlist bypass
+  (`hitl/readonly-allowlist.ts`) — diagnostic commands (`git log`,
+  `kubectl get`, `grep`, ...) skip the approval gate entirely; anything with
+  a redirect or a mutating token still requires approval.
+
+Full detail: [ARCHITECTURE.md#output-verification-gate](../docs/ARCHITECTURE.md#output-verification-gate)'s
+"Department-specific evaluators" and "Growth preflight" subsections, and
+[ARCHITECTURE.md#human-in-the-loop-hitl](../docs/ARCHITECTURE.md#human-in-the-loop-hitl)'s
+"Real actions behind the approval gate" and "HITL ergonomics" subsections.
+All new env vars documented in [CONFIGURATION.md](../docs/CONFIGURATION.md).
+
+**Verification:** automated tests only (`checks-phase3.test.ts`,
+`preflight.test.ts`, `readonly-allowlist.test.ts`,
+`github_create_issue.test.ts`, new `output-gate.test.ts` cases for the
+product metric-sourcing built-in, new `runner-edge-cases.test.ts` cases for
+the readonly bypass and enriched approval descriptions, and new
+`slack-hitl-bridge.test.ts`/`ApprovalStore.sweepReminders` cases) —
+**not yet live-verified against a real Slack workspace or a real GitHub
+repo.** Same caveat as every phase before this: implemented and unit-tested,
+not field-confirmed. In particular, `github_create_issue` has never been
+exercised against the real GitHub API outside mocked fetch calls, and the
+Slack reminder/re-request UI has never been seen in an actual Slack client.
+
+This closes the Fable production-hardening spec end to end (Phases 1–5).

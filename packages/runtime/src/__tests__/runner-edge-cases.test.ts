@@ -262,6 +262,86 @@ describe("AgentRunner - Edge Cases", () => {
       server.stop();
     }
   });
+
+  test("a read-only exec_code call skips the HITL gate entirely (readonly-allowlist bypass)", async () => {
+    const server = orchServer();
+    try {
+      const registry = new ToolRegistry();
+      registry.register(
+        { name: "exec_code", description: "Run code", parameters: {} },
+        async () => ({ exitCode: 0, stdout: "pod-1 Running\n", stderr: "" }),
+      );
+      registry.setApprovalRequired(["exec_code"]);
+
+      let requestApprovalCalled = false;
+      const hitlGate: HitlGate = {
+        async requestApproval() { requestApprovalCalled = true; return "req-1"; },
+        async checkApproval() { return "approved"; },
+        async waitForApproval(): Promise<ApprovalDecision> {
+          return { requestId: "req-1", status: "approved", decidedBy: "admin", decidedAt: "2024-01-01" };
+        },
+        async listPending() { return []; },
+      };
+
+      const llm = simpleLlm([
+        '{"steps": [{"description": "Check pod status", "tool": "exec_code", "args": {"language": "bash", "code": "kubectl get pods"}}]}',
+        '{"complete": true, "output": "Pod is running."}',
+      ]);
+
+      const runner = new AgentRunner({
+        llmClient: llm,
+        toolRegistry: registry,
+        orchBaseUrl: `http://localhost:${server.port}`,
+        hitlGate,
+      });
+
+      const result = await runner.executeTask(agent, makeTask());
+      expect(result.status).toBe("completed");
+      expect(requestApprovalCalled).toBe(false);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("a mutating exec_code call still goes through the HITL gate with the args included in the approval description", async () => {
+    const server = orchServer();
+    try {
+      const registry = new ToolRegistry();
+      registry.register(
+        { name: "exec_code", description: "Run code", parameters: {} },
+        async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      );
+      registry.setApprovalRequired(["exec_code"]);
+
+      let capturedDescription = "";
+      const hitlGate: HitlGate = {
+        async requestApproval(req: ApprovalRequest) { capturedDescription = req.description; return "req-1"; },
+        async checkApproval() { return "approved"; },
+        async waitForApproval(): Promise<ApprovalDecision> {
+          return { requestId: "req-1", status: "approved", decidedBy: "admin", decidedAt: "2024-01-01" };
+        },
+        async listPending() { return []; },
+      };
+
+      const llm = simpleLlm([
+        '{"steps": [{"description": "Run the rollback script", "tool": "exec_code", "args": {"language": "bash", "code": "rm -rf /tmp/old-release"}}]}',
+        '{"complete": true, "output": "Rolled back."}',
+      ]);
+
+      const runner = new AgentRunner({
+        llmClient: llm,
+        toolRegistry: registry,
+        orchBaseUrl: `http://localhost:${server.port}`,
+        hitlGate,
+      });
+
+      await runner.executeTask(agent, makeTask());
+      expect(capturedDescription).toContain("Run the rollback script");
+      expect(capturedDescription).toContain("rm -rf /tmp/old-release");
+    } finally {
+      server.stop();
+    }
+  });
 });
 
 describe("ConfigBasedSelector", () => {

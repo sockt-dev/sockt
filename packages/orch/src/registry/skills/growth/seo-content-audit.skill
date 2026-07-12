@@ -15,6 +15,11 @@
     "Every E-E-A-T score is backed by a specific citation from the actual content, not a generic industry claim",
     "Report distinguishes 'written to a word-count target' content from genuinely helpful content"
   ],
+  "checks": [
+    { "criterion": "All three Who/How/Why questions answered explicitly, not skipped", "type": "human_review" },
+    { "criterion": "Every E-E-A-T score is backed by a specific citation from the actual content, not a generic industry claim", "type": "human_review" },
+    { "criterion": "Report distinguishes 'written to a word-count target' content from genuinely helpful content", "type": "human_review" }
+  ],
   "compiledFrom": "AgriciDaniel/claude-seo@seo-content",
   "compiledAt": "2026-07-12T00:00:00.000Z"
 }

@@ -23,6 +23,15 @@ export interface OrchestratorApiDeps {
   db: Database;
   telemetry?: TelemetryEmitter;
   onApprovalCreated?: (approval: StoredApproval) => void;
+  /** Fired once per approval, HITL_REMINDER_LEAD_MS before it times out —
+   * see ApprovalStore.sweepReminders. Never fires for approvals with no
+   * timeoutAt (unset timeout = no reminder, since there's nothing to remind
+   * before). */
+  onApprovalReminder?: (approval: StoredApproval) => void;
+  /** Fired once an approval actually times out (sweepTimeouts), distinct
+   * from onApprovalReminder — lets serve.ts post a "re-request?" prompt
+   * instead of just a passive reminder. */
+  onApprovalTimeout?: (approval: StoredApproval) => void;
   taskOriginStore?: TaskOriginStore;
   /** When set, every route except /health requires `Authorization: Bearer
    * <apiToken>`. Unset (the default) preserves the existing no-auth local-dev
@@ -94,7 +103,13 @@ export class OrchestratorApi {
     // agent-runner.ts fails closed on any non-"approved" status, so a swept
     // timeout still results in the gated tool NOT running.
     this.sweepInterval = setInterval(async () => {
+      const reminderLeadMs = Number(process.env.HITL_REMINDER_LEAD_MS ?? 120_000);
+      for (const a of this.approvalStore.sweepReminders(reminderLeadMs)) {
+        deps.onApprovalReminder?.(a);
+      }
+
       const swept = this.approvalStore.sweepTimeouts();
+      for (const a of swept) deps.onApprovalTimeout?.(a);
       if (swept.length > 0) {
         console.log(`[orch] swept ${swept.length} timed-out approval(s)`);
       }

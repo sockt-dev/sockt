@@ -1,8 +1,9 @@
 import type { Task } from "@sockt/types";
 import type { ExecutionTrace } from "../trace/execution-trace.ts";
-import type { SkillFile } from "../types.ts";
+import type { SkillFile, SkillCheckSeverity } from "../types.ts";
 import { capabilityClaimWithoutTool } from "../skills/hallucination-check.ts";
-import { isImplementedCheckType, runCheck } from "./checks.ts";
+import { isImplementedCheckType, runCheck, findUnsourcedMetricClaim } from "./checks.ts";
+import { collectToolEvidence } from "./evidence.ts";
 
 export interface GateFailure {
   /** SkillCheck["type"], or "capability_claim" for the always-on built-in. */
@@ -11,6 +12,11 @@ export interface GateFailure {
   criterion: string;
   /** Concrete and actionable: what was found vs. what's required. */
   detail: string;
+  /** Set by an evaluator that needs to override the check's declared
+   * severity for a specific failure (e.g. grounded_quotes downgrading to a
+   * warning when the task simply provided no verbatim input to ground
+   * against). Falls back to the check's own `severity` when unset. */
+  severity?: SkillCheckSeverity;
 }
 
 export interface GateResult {
@@ -66,12 +72,20 @@ export function runOutputGate(input: OutputGateInput): GateResult {
     });
   }
 
-  // Department-specific built-ins beyond the capability-claim check (e.g.
-  // product's metric-sourcing check, spec §3.2) land in Phase 3 — see
-  // docs/ARCHITECTURE.md's output gate section for the rollout mapping.
+  // Department-wide built-in beyond the capability-claim check: every
+  // product-department task gets metric-sourcing enforcement regardless of
+  // which skill (if any) applies — spec §3.2/§5.3. A skill can additionally
+  // declare its own `metric_sourcing` check (see checks.ts) for a
+  // criterion-specific version of the same rule; this catches the general
+  // case even when no skill's checks array does.
+  const evidence = collectToolEvidence(input.trace);
+  if (input.department === "product") {
+    const metricFailure = findUnsourcedMetricClaim(input.output, evidence, input.task.description);
+    if (metricFailure) blockers.push(metricFailure);
+  }
 
   const fullText = [input.output, ...input.artifacts].join("\n\n");
-  const checkCtx = { fullText, output: input.output };
+  const checkCtx = { fullText, output: input.output, evidence, taskDescription: input.task.description };
   const coveredCriteria = new Set<string>();
 
   for (const check of input.skill?.checks ?? []) {
@@ -83,15 +97,17 @@ export function runOutputGate(input: OutputGateInput): GateResult {
     }
 
     if (!isImplementedCheckType(check.type)) {
-      // Declared ahead of its evaluator (e.g. lead_provenance, evidence_citation
-      // — Phase 3). Degrade to human review rather than block or crash.
+      // Declared ahead of its evaluator — degrades to human review rather
+      // than block or crash. Nothing currently hits this branch (all ten
+      // non-human_review types have evaluators as of Phase 3), but it stays
+      // as the graceful-degradation path for any future check type.
       humanReview.push(check.criterion);
       continue;
     }
 
     const failure = runCheck(check, checkCtx);
     if (!failure) continue;
-    if (check.severity === "warn") {
+    if ((failure.severity ?? check.severity) === "warn") {
       warnings.push(failure);
     } else {
       blockers.push(failure);

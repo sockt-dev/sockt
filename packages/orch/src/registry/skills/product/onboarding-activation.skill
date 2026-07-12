@@ -16,6 +16,11 @@
     "First session has one goal, not a tour of every feature",
     "Flow design is 'do the thing' not 'read about the thing'"
   ],
+  "checks": [
+    { "criterion": "Activation event is a single concrete action, not a vague description", "type": "human_review" },
+    { "criterion": "First session has one goal, not a tour of every feature", "type": "human_review" },
+    { "criterion": "Flow design is 'do the thing' not 'read about the thing'", "type": "human_review" }
+  ],
   "compiledFrom": "coreyhaines31/marketingskills@onboarding",
   "compiledAt": "2026-07-12T00:00:00.000Z"
 }

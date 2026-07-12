@@ -18,6 +18,11 @@
     "Each lead has: company, name, role, email or LinkedIn URL",
     "Leads scored and ranked by ICP fit"
   ],
+  "checks": [
+    { "criterion": "Minimum 10 qualified leads with contact information", "type": "count_range", "pattern": "^\\s*(?:\\|\\s*[^|\\n]+\\s*\\||\\d+\\.)\\s.*(?:@|linkedin\\.com)", "flags": "gmi", "min": 10 },
+    { "criterion": "Each lead has: company, name, role, email or LinkedIn URL", "type": "lead_provenance" },
+    { "criterion": "Leads scored and ranked by ICP fit", "type": "regex_present", "pattern": "score", "flags": "i" }
+  ],
   "compiledFrom": "apify/agent-skills@apify-lead-generation + community/growth-engine",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

@@ -5,6 +5,7 @@ import { httpRequestDefinition, httpRequestHandler } from "./http_request.ts";
 import { createTaskDefinition, makeCreateTaskHandler } from "./create_task.ts";
 import { execCodeDefinition, makeExecCodeHandler } from "./exec_code.ts";
 import { askUserDefinition, askUserHandler } from "./ask_user.ts";
+import { githubCreateIssueDefinition, makeGithubCreateIssueHandler } from "./github_create_issue.ts";
 
 export interface BuiltInToolOptions {
   orchUrl: string;
@@ -39,6 +40,10 @@ export interface BuiltInToolOptions {
    * fetch to orch — see HttpOrchClientConfig.apiToken for the matching
    * rationale. */
   apiToken?: string;
+  /** github_create_issue is only registered when both are set — otherwise
+   * plan.ts's tool listing (generated from registry.getDefinitions()) would
+   * advertise a tool that always throws. */
+  github?: { token?: string; defaultRepo?: string };
 }
 
 export function registerBuiltInTools(registry: ToolRegistry, opts?: BuiltInToolOptions): void {
@@ -62,5 +67,9 @@ export function registerBuiltInTools(registry: ToolRegistry, opts?: BuiltInToolO
         opts.apiToken,
       ),
     );
+
+    if (opts.github?.token && opts.github?.defaultRepo) {
+      registry.register(githubCreateIssueDefinition, makeGithubCreateIssueHandler(opts.github));
+    }
   }
 }

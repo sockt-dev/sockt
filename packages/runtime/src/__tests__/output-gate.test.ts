@@ -97,10 +97,11 @@ describe("checks.ts evaluators", () => {
     expect(runCheck(max, { fullText: "TODO: fix this", output: "" })).not.toBeNull();
   });
 
-  test("isImplementedCheckType is false for Phase-3 types", () => {
-    expect(isImplementedCheckType("lead_provenance")).toBe(false);
-    expect(isImplementedCheckType("evidence_citation")).toBe(false);
-    expect(isImplementedCheckType("section_present")).toBe(true);
+  test("isImplementedCheckType is true for every non-human_review SkillCheck type as of Phase 3", () => {
+    for (const t of ["section_present", "regex_present", "regex_absent", "max_words", "count_range", "lead_provenance", "computed_number", "metric_sourcing", "grounded_quotes", "evidence_citation"] as const) {
+      expect(isImplementedCheckType(t)).toBe(true);
+    }
+    expect(isImplementedCheckType("human_review")).toBe(false);
   });
 });
 
@@ -198,15 +199,18 @@ describe("runOutputGate", () => {
     expect(result.humanReview).toContain("No feature-dumping");
   });
 
-  test("a check type without an evaluator yet (Phase 3) degrades to humanReview instead of blocking or crashing", () => {
+  test("evidence_citation (implemented as of Phase 3) actually runs rather than degrading to humanReview", () => {
     const skill: SkillFile = {
       ...outreachSkill,
       successCriteria: ["Root cause identified with supporting evidence"],
       checks: [{ criterion: "Root cause identified with supporting evidence", type: "evidence_citation", claimPattern: "root cause", minOverlapTokens: 4 }],
     };
+    // "Short." contains no "root cause" claim, so the check has nothing to
+    // flag — passes cleanly, and (unlike Phase 2's placeholder behavior)
+    // does NOT land in humanReview, since it was actually evaluated.
     const result = runOutputGate({ ...baseInput, skill, output: "Short." });
     expect(result.pass).toBe(true);
-    expect(result.humanReview).toContain("Root cause identified with supporting evidence");
+    expect(result.humanReview).not.toContain("Root cause identified with supporting evidence");
   });
 
   test("severity:warn failures do not block but do appear in warnings and the review footer", () => {
@@ -243,6 +247,28 @@ describe("runOutputGate", () => {
       compiledFrom: "test", compiledAt: "2026-01-01T00:00:00Z",
     };
     const result = runOutputGate({ ...baseInput, trace, skill, artifacts: collectArtifacts(trace), output: "Runbook saved to file." });
+    expect(result.pass).toBe(true);
+  });
+
+  test("product department gets the metric-sourcing built-in regardless of skill", () => {
+    const result = runOutputGate({ ...baseInput, department: "product", skill: null, output: "Conversion rate is 42%. Great progress." });
+    expect(result.pass).toBe(false);
+    expect(result.blockers.some((b) => b.checkType === "metric_sourcing")).toBe(true);
+  });
+
+  test("the metric-sourcing built-in does not fire for non-product departments", () => {
+    const result = runOutputGate({ ...baseInput, department: "growth", skill: null, output: "Conversion rate is 42%. Great progress." });
+    expect(result.pass).toBe(true);
+  });
+
+  test("product metric-sourcing built-in passes when the number is backed by a real tool result", () => {
+    const trace = new ExecutionTrace("t", "a");
+    trace.addStep({
+      phase: "act", action: "search", toolCall: { id: "1", name: "web_search", arguments: {} },
+      output: { results: [{ snippet: "conversion rate hit 42% last week" }] },
+      durationMs: 0, timestamp: "",
+    });
+    const result = runOutputGate({ ...baseInput, trace, department: "product", skill: null, output: "Conversion rate is 42%." });
     expect(result.pass).toBe(true);
   });
 });

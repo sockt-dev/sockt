@@ -19,6 +19,12 @@
     "Subject lines are specific and curiosity-driven not clickbait",
     "Timing and delays documented for each email"
   ],
+  "checks": [
+    { "criterion": "Each email has exactly one primary CTA", "type": "human_review" },
+    { "criterion": "Sequence has clear value progression (educate → nurture → convert)", "type": "human_review" },
+    { "criterion": "Subject lines are specific and curiosity-driven not clickbait", "type": "human_review" },
+    { "criterion": "Timing and delays documented for each email", "type": "human_review" }
+  ],
   "compiledFrom": "louisblythe/salesskills@email-sequence + community/email-systems",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

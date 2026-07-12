@@ -16,6 +16,11 @@
     "No fabricated personal claims, credentials, or metrics not supplied by the requester",
     "Post body delivers on what the hook promises rather than being generic"
   ],
+  "checks": [
+    { "criterion": "Hook stays within the two-line, ~40-char-per-line structure", "type": "human_review" },
+    { "criterion": "No fabricated personal claims, credentials, or metrics not supplied by the requester", "type": "human_review" },
+    { "criterion": "Post body delivers on what the hook promises rather than being generic", "type": "human_review" }
+  ],
   "compiledFrom": "charlie947/social-media-skills@hook-generator + charlie947/social-media-skills@post-writer",
   "compiledAt": "2026-07-12T00:00:00.000Z"
 }

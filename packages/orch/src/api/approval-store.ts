@@ -16,6 +16,7 @@ export interface StoredApproval {
   createdAt: string;
   decidedAt?: string;
   timeoutAt?: string;
+  remindedAt?: string;
 }
 
 interface ApprovalRow {
@@ -33,6 +34,7 @@ interface ApprovalRow {
   created_at: string;
   decided_at: string | null;
   timeout_at: string | null;
+  reminded_at: string | null;
 }
 
 function mapRow(row: ApprovalRow): StoredApproval {
@@ -51,6 +53,7 @@ function mapRow(row: ApprovalRow): StoredApproval {
     createdAt: row.created_at,
     decidedAt: row.decided_at ?? undefined,
     timeoutAt: row.timeout_at ?? undefined,
+    remindedAt: row.reminded_at ?? undefined,
   };
 }
 
@@ -70,6 +73,7 @@ export class ApprovalStore {
   private readonly listPendingStmt: Statement;
   private readonly decideStmt: Statement;
   private readonly sweepTimeoutsStmt: Statement;
+  private readonly sweepRemindersStmt: Statement;
 
   constructor(private readonly db: Database) {
     this.insertStmt = db.prepare(`
@@ -89,6 +93,12 @@ export class ApprovalStore {
     this.sweepTimeoutsStmt = db.prepare(`
       UPDATE pending_human_inputs SET status = 'timeout', decided_by = 'system:timeout', decided_at = ?1
       WHERE kind = 'approval' AND status = 'pending' AND timeout_at IS NOT NULL AND timeout_at <= ?1
+      RETURNING *
+    `);
+    this.sweepRemindersStmt = db.prepare(`
+      UPDATE pending_human_inputs SET reminded_at = ?1
+      WHERE kind = 'approval' AND status = 'pending' AND reminded_at IS NULL
+        AND timeout_at IS NOT NULL AND timeout_at <= ?2
       RETURNING *
     `);
   }
@@ -162,6 +172,17 @@ export class ApprovalStore {
    * dead or the network partitioned when its deadline passes. */
   sweepTimeouts(): StoredApproval[] {
     const rows = this.sweepTimeoutsStmt.all(new Date().toISOString()) as ApprovalRow[];
+    return rows.map(mapRow);
+  }
+
+  /** Pending approvals whose timeout_at is within leadMs of now and that
+   * have not already been reminded — marks reminded_at (so the same
+   * approval never reminds twice) and returns them. Call periodically
+   * alongside sweepTimeouts (see serve.ts's setInterval). */
+  sweepReminders(leadMs: number): StoredApproval[] {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + leadMs).toISOString();
+    const rows = this.sweepRemindersStmt.all(now.toISOString(), cutoff) as ApprovalRow[];
     return rows.map(mapRow);
   }
 }

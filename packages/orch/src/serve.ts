@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { initializeSchema } from "@sockt/fsm";
+import { initializeSchema, SqliteTaskStore } from "@sockt/fsm";
 import type { ChannelGateway, TelemetryEmitter } from "@sockt/types";
 import { Orchestrator } from "./orchestrator.ts";
 import type { RoutingConfig } from "./orchestrator.ts";
@@ -25,6 +25,8 @@ const taskOriginStore = new TaskOriginStore(db);
 let channelGateway: ChannelGateway | undefined;
 let telemetry: TelemetryEmitter | undefined;
 let onApprovalCreated: ((approval: import("./api/approval-store.ts").StoredApproval) => void) | undefined;
+let onApprovalReminder: ((approval: import("./api/approval-store.ts").StoredApproval) => void) | undefined;
+let onApprovalTimeout: ((approval: import("./api/approval-store.ts").StoredApproval) => void) | undefined;
 
 const slackAppToken = process.env.SLACK_APP_TOKEN;
 const slackBotToken = process.env.SLACK_BOT_TOKEN;
@@ -42,7 +44,14 @@ if (slackAppToken && slackBotToken) {
   // exists only so the bridge can call .decide() from a button click without
   // Orchestrator/OrchestratorApi needing to expose their internal one.
   const approvalStore = new ApprovalStore(db);
-  const bridge = new SlackHitlBridge(slack, approvalStore);
+  // Same db handle again — mirrors the /tasks/:id/retry route's own
+  // owner-clearing requirement so a re-requested task actually re-enters
+  // the claim queue instead of sitting pending-but-still-owned.
+  const rerequestStore = new SqliteTaskStore(db);
+  const onRerequest = async (taskId: string) => {
+    await rerequestStore.update(taskId, { status: "pending", owner: null });
+  };
+  const bridge = new SlackHitlBridge(slack, approvalStore, onRerequest);
   onApprovalCreated = (approval) => {
     const origin = taskOriginStore.get(approval.taskId);
     if (!origin) {
@@ -51,6 +60,19 @@ if (slackAppToken && slackBotToken) {
     }
     bridge.postApprovalRequest(approval, origin.channelId, origin.threadId).catch((err) => {
       console.error(`[orch] failed to post approval request for approval=${approval.id}:`, err);
+    });
+  };
+  onApprovalReminder = (approval) => {
+    const origin = taskOriginStore.get(approval.taskId);
+    if (!origin) return;
+    bridge.postReminder(approval, origin.channelId, origin.threadId).catch((err) => {
+      console.error(`[orch] failed to post approval reminder for approval=${approval.id}:`, err);
+    });
+  };
+  onApprovalTimeout = (approval) => {
+    const origin = taskOriginStore.get(approval.taskId);
+    bridge.postTimeoutNotice(approval, origin ? { channelId: origin.channelId, threadId: origin.threadId } : undefined).catch((err) => {
+      console.error(`[orch] failed to post approval timeout notice for approval=${approval.id}:`, err);
     });
   };
 
@@ -102,6 +124,8 @@ const orch = new Orchestrator({
   telemetry,
   routing,
   onApprovalCreated,
+  onApprovalReminder,
+  onApprovalTimeout,
   apiToken,
 });
 

@@ -19,6 +19,10 @@
     "Pain points have frequency and intensity scores",
     "Clear product implications — not just observations"
   ],
+  "checks": [
+    { "criterion": "Every insight is backed by at least 3 user data points", "type": "grounded_quotes", "minQuotes": 3 },
+    { "criterion": "JTBD statements describe motivations not features", "type": "human_review" }
+  ],
   "compiledFrom": "community/ux-feedback + community/product-design",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

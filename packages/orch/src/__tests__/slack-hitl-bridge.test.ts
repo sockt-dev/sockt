@@ -124,4 +124,145 @@ describe("SlackHitlBridge", () => {
     await (bridge as unknown as { handleInteraction(p: SlackInteractionPayload): Promise<void> }).handleInteraction(payload);
     expect(calls).toHaveLength(0);
   });
+
+  test("postReminder posts a plain thread message, not a new approve/deny prompt", async () => {
+    const approval = approvalStore.create({
+      tenantId: "t1", agentId: "agent-1", taskId: "task-4", tier: "confirm",
+      action: "exec_code", description: "Run migration", timeoutMs: 300_000,
+    });
+    await bridge.postReminder(approval, "C123", "1700000000.000100");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("chat.postMessage");
+    expect(calls[0].body.text).toContain("Reminder");
+    expect(calls[0].body.text).toContain("exec_code");
+    const actionsBlock = (calls[0].body.blocks ?? []).find((b: any) => b.type === "actions");
+    expect(actionsBlock).toBeUndefined();
+  });
+
+  test("postTimeoutNotice edits the original message with a re-request button", async () => {
+    const approval = approvalStore.create({
+      tenantId: "t1", agentId: "agent-1", taskId: "task-5", tier: "confirm",
+      action: "exec_code", description: "Run migration",
+    });
+    await bridge.postApprovalRequest(approval, "C123", null);
+    calls = [];
+
+    await bridge.postTimeoutNotice(approval);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("chat.update");
+    const actionsBlock = calls[0].body.blocks.find((b: any) => b.type === "actions");
+    expect(actionsBlock.elements[0].action_id).toBe("hitl_rerequest");
+    expect(actionsBlock.elements[0].value).toBe(approval.taskId);
+  });
+
+  test("postTimeoutNotice falls back to a fresh thread post when there's no tracked message (e.g. after a restart)", async () => {
+    const approval = approvalStore.create({
+      tenantId: "t1", agentId: "agent-1", taskId: "task-6", tier: "confirm",
+      action: "exec_code", description: "Run migration",
+    });
+    // No postApprovalRequest call — simulates the in-memory map missing the entry.
+    await bridge.postTimeoutNotice(approval, { channelId: "C456", threadId: "1700000000.000200" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("chat.postMessage");
+    expect(calls[0].body.channel).toBe("C456");
+  });
+
+  test("clicking re-request calls onRerequest with the taskId and edits the message", async () => {
+    const rerequested: string[] = [];
+    const rerequestBridge = new SlackHitlBridge(gateway, approvalStore, async (taskId) => {
+      rerequested.push(taskId);
+    });
+
+    const payload: SlackInteractionPayload = {
+      type: "block_actions",
+      user: { id: "U999" },
+      actions: [{ action_id: "hitl_rerequest", value: "task-7" }],
+      channel: { id: "C123" },
+      message: { ts: "1700000000.000300" },
+    } as unknown as SlackInteractionPayload;
+
+    await (rerequestBridge as unknown as { handleInteraction(p: SlackInteractionPayload): Promise<void> }).handleInteraction(payload);
+
+    expect(rerequested).toEqual(["task-7"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("chat.update");
+    expect(calls[0].body.text).toContain("Re-queued");
+  });
+
+  test("re-request click is a no-op when no onRerequest callback was provided", async () => {
+    const payload: SlackInteractionPayload = {
+      type: "block_actions",
+      user: { id: "U999" },
+      actions: [{ action_id: "hitl_rerequest", value: "task-8" }],
+    } as unknown as SlackInteractionPayload;
+
+    await (bridge as unknown as { handleInteraction(p: SlackInteractionPayload): Promise<void> }).handleInteraction(payload);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("ApprovalStore.sweepReminders", () => {
+  let db: Database;
+  let approvalStore: ApprovalStore;
+
+  beforeEach(() => {
+    db = createTestDb();
+    approvalStore = new ApprovalStore(db);
+  });
+
+  test("returns and marks pending approvals within the reminder lead window", () => {
+    const approval = approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", timeoutMs: 60_000, // times out in 1 minute
+    });
+
+    const due = approvalStore.sweepReminders(120_000); // remind if timeout is within 2 minutes
+    expect(due.map((a) => a.id)).toContain(approval.id);
+  });
+
+  test("does not re-return an approval it already reminded", () => {
+    approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", timeoutMs: 60_000,
+    });
+
+    const first = approvalStore.sweepReminders(120_000);
+    expect(first).toHaveLength(1);
+    const second = approvalStore.sweepReminders(120_000);
+    expect(second).toHaveLength(0);
+  });
+
+  test("does not return an approval whose timeout is outside the lead window", () => {
+    approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", timeoutMs: 10 * 60_000, // 10 minutes out
+    });
+
+    const due = approvalStore.sweepReminders(120_000); // only within 2 minutes
+    expect(due).toHaveLength(0);
+  });
+
+  test("does not return an approval with no timeout at all", () => {
+    approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", // no timeoutMs
+    });
+
+    const due = approvalStore.sweepReminders(120_000);
+    expect(due).toHaveLength(0);
+  });
+
+  test("does not remind an approval that's already been decided", () => {
+    const approval = approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", timeoutMs: 60_000,
+    });
+    approvalStore.decide(approval.id, { status: "approved" });
+
+    const due = approvalStore.sweepReminders(120_000);
+    expect(due).toHaveLength(0);
+  });
 });

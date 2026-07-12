@@ -20,6 +20,12 @@
     "All smoke tests passing",
     "Rollback capability confirmed and documented"
   ],
+  "checks": [
+    { "criterion": "Zero increase in error rate post-deployment", "type": "human_review" },
+    { "criterion": "Latency within 10% of pre-deployment baseline", "type": "human_review" },
+    { "criterion": "All smoke tests passing", "type": "human_review" },
+    { "criterion": "Rollback capability confirmed and documented", "type": "human_review" }
+  ],
   "compiledFrom": "community/deployment-engineer + community/deployment-procedures + vasilyu1983/ai-agents-public@ops-devops-platform",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

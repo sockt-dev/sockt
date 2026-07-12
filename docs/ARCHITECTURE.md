@@ -342,6 +342,66 @@ sequenceDiagram
   conversation field) so the next Plan phase reads it as part of the task
   context.
 
+### Real actions behind the approval gate (Phase 4)
+
+`packages/runtime/src/tools/built-in/github_create_issue.ts` is the first
+tool with a real, external, hard-to-undo side effect an agent can reach:
+`POST /repos/:owner/:repo/issues` against the real GitHub API. It's only
+registered — and only ever advertised to the model via `plan.ts`'s tool
+listing — when both `GITHUB_TOKEN` and `GITHUB_REPO` are configured
+(`BuiltInToolOptions.github`, checked in `registerBuiltInTools`), so the
+model never sees a tool name it would immediately fail to use. `product` now
+defaults to gating it through `APPROVAL_REQUIRED_TOOLS` (alongside engops'
+existing `exec_code` default) in `serve.ts`. To make the gated approval
+actually reviewable, `AgentRunner.checkHitlApproval` now appends the plan
+step's `args` (capped, JSON-stringified) to the description
+`SlackHitlBridge` posts — previously a Slack reviewer only saw the plan's
+free-text description ("run the migration script"), not what would actually
+execute.
+
+### HITL ergonomics (Phase 5)
+
+Three independent improvements to the approval flow, none touching the core
+gate semantics from [Tool approval gate](#1-tool-approval-gate) above:
+
+- **Reminder before timeout.** `ApprovalStore.sweepReminders(leadMs)`
+  (`packages/orch/src/api/approval-store.ts`) finds pending approvals whose
+  `timeoutAt` is within `HITL_REMINDER_LEAD_MS` (default 2 min) and hasn't
+  already been reminded, marks `reminded_at`, and returns them — called
+  alongside the existing `sweepTimeouts()` in `OrchestratorApi`'s sweep
+  interval. `OrchestratorApiDeps`/`OrchestratorConfig` gained an
+  `onApprovalReminder` callback; `orch/src/serve.ts` wires it to
+  `SlackHitlBridge.postReminder`, which posts a plain "⏰ Reminder: approval
+  for *X* still pending" thread message — not a new approve/deny prompt,
+  the original message's buttons are still live.
+- **Re-request after timeout.** `sweepTimeouts()`'s existing sweep now also
+  fires a new `onApprovalTimeout` callback, wired to
+  `SlackHitlBridge.postTimeoutNotice`: it edits the original approval
+  message (falling back to a fresh thread post via `taskOriginStore` if the
+  in-memory message map missed, e.g. after an orch restart) to show a
+  "Re-request approval" button (`action_id: "hitl_rerequest"`, `value:` the
+  **taskId**, not the spent approval id). Clicking it calls the bridge's
+  `onRerequest` callback — `orch/src/serve.ts` implements this with direct
+  `SqliteTaskStore` access, setting the task back to `pending` with `owner`
+  cleared (mirroring `/tasks/:id/retry`'s owner-clearing requirement) — so
+  the worker re-claims, re-plans, hits the same gated tool again, and a
+  fresh approval row + Slack message appears through the normal flow. No new
+  approval semantics.
+- **Read-only allowlist bypass.** `packages/runtime/src/hitl/readonly-allowlist.ts`'s
+  `isReadOnlyExec(toolName, args)` returns true only when `toolName ===
+  "exec_code"`, the language is bash/sh, and *every* line (split on `|`,
+  `&&`, `;`) matches a read-only command pattern (`git log`, `kubectl get`,
+  `grep`, `curl -I`, ...) with no `>`/`>>` redirect or mutation token
+  (`rm`/`mv`/`chmod`/`tee`/`sed -i`/...) anywhere. `AgentRunner`'s HITL check
+  in `runLoop` skips `checkHitlApproval` entirely when this returns true,
+  logging a `hitl_bypass_readonly` trace step for auditability instead —
+  routing every diagnostic `kubectl get pods` through a human approval queue
+  just trains people to rubber-stamp without reading. Fail-closed: any
+  unmatched line, non-shell language, or unknown tool returns false.
+  `HITL_READONLY_BYPASS=false` disables the bypass entirely;
+  `ENGOPS_READONLY_EXTRA` appends comma-separated extra regex patterns to
+  the built-in allowlist.
+
 ## Output Verification Gate
 
 HITL (above) stops an agent from *acting* unsafely. This is the second half:
@@ -461,6 +521,77 @@ sequenceDiagram
   children (see Task Graph below) is checked *before* the output gate runs
   — there's no real "final output" to verify yet when the run is actually
   waiting on subtasks, so `maybeBlockOnChildren` still takes priority.
+
+### Department-specific evaluators (Phase 3)
+
+Five more `SkillCheck` types, all in `packages/runtime/src/verification/checks.ts`,
+built once the Phase 2 framework above existed to hang them on:
+
+- **`lead_provenance`** (growth) — parses lead rows out of `[output, ...artifacts]`
+  (markdown table rows or numbered-list lines containing an email, a
+  `linkedin.com` URL, or a company-suffix token like "Inc"/"LLC"), then
+  requires each row's URL to appear in `collectToolEvidence(trace).urls` or
+  its email's domain to appear somewhere in the tool-output text — i.e. every
+  lead must be traceable to a real `web_search`/`http_request` result, not
+  invented. Blocks outright if there's no lead-shaped content at all, or if
+  no search tool ran and no URLs were ever seen.
+- **`computed_number`** (growth) — for a claim like "K-factor is 0.42", requires
+  an `exec_code` call happened in this run *and* that the stated number
+  (±0.5% tolerance) actually appears in that call's stdout — catches a model
+  stating a plausible-sounding number instead of actually running the
+  arithmetic.
+- **`metric_sourcing`** (product) — `findUnsourcedMetricClaim` (exported
+  separately from the dispatch table) scans `output` sentence-by-sentence for
+  metric-shaped claims (`%`, `$`, or a named SaaS metric like MRR/CAC/NPS
+  followed by a number), and passes each one only if it's prefixed/neighbored
+  by `ASSUMPTION`/`assumed`/`estimate`, or its number is backed by
+  `collectToolEvidence(trace).numbers`, or the number already appears in
+  `task.description` (user-supplied). This one is also an **always-on
+  built-in**: `runOutputGate` calls it unconditionally for
+  `department === "product"` regardless of which skill (if any) applies —
+  see the department-independent built-ins call site in
+  `verification/output-gate.ts`, right alongside the capability-claim check.
+- **`grounded_quotes`** (product) — extracts verbatim quoted/bulleted spans
+  from `task.description` (the actual user research input) and requires at
+  least `minQuotes` of them to reappear in the output as a ≥6-consecutive-word
+  overlap — a synthesis that doesn't quote the real input is generic prose,
+  not research. When the input itself contained no verbatim feedback to
+  ground against, this check **downgrades to a warning** rather than blocking
+  on an impossible bar — the one case in this framework where an evaluator
+  overrides its own check's declared severity (via `GateFailure.severity`,
+  which `output-gate.ts` prefers over `check.severity` when both are set).
+- **`evidence_citation`** (engops) — finds sentences matching a causal-claim
+  pattern (e.g. "root cause", "caused by"), tokenizes them to content words
+  (≥4 chars, stopwords dropped), and requires enough of those tokens
+  (`minOverlapTokens`, default 4) to appear in `task.description` +
+  `collectToolEvidence(trace).text` — the deterministic-heuristic version of
+  "don't invent log lines or config changes that were never in the input or
+  any tool result."
+
+`checks[]` authoring is now complete for all 17 bundled skills — the six left
+over from Phase 2 (`lead-generation`, `growth-metrics`, `product-manager`,
+`user-research`, `github-issues`, `devops-troubleshooter`) got real checks
+using the evaluators above; the remaining seven
+(`email-sequence`, `churn-prevention`, `seo-content-audit`,
+`social-hook-writing`, `pricing-strategy`, `onboarding-activation`,
+`deployment-engineer`) got `human_review` entries for every criterion — the
+framework picks them up for free whenever a future evaluator covers them,
+without needing another authoring pass.
+
+### Growth preflight (Phase 3, §4.2)
+
+`packages/runtime/src/runner/preflight.ts`'s `preflightCheck` runs at the very
+top of `AgentRunner.runLoop`, before skill injection or any LLM call: if the
+agent is in `growth` and the task looks like lead generation (explicit
+`targetSkill: "lead-generation"`, or the description matches a
+lead/prospect/contact-list pattern) and neither `TAVILY_API_KEY` nor
+`BRAVE_SEARCH_API_KEY` is configured, it short-circuits straight to
+`needs_input` — "no search API key configured, configure one or ask me to
+produce a search plan instead" — riding the exact same `needs_input` →
+`QuestionStore` → threaded-reply-resume flow `ask_user` already uses, zero new
+machinery. This stops the model from ever reaching the point of inventing
+plausible-looking contacts (which `lead_provenance` above would only catch
+*after* generation). `GROWTH_REQUIRE_SEARCH_API=false` disables it.
 
 ## Task Graph: Targeting, Ordering, and Joins
 

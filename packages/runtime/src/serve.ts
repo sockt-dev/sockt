@@ -27,6 +27,12 @@ const apiKey       = process.env.MODEL_API_KEY  ?? "";
 const baseUrl      = process.env.MODEL_BASE_URL || undefined;
 const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? 1);
 
+// See tools/built-in/github_create_issue.ts — only registered (and only
+// advertised to the model) when both are set.
+const githubToken = process.env.GITHUB_TOKEN || undefined;
+const githubRepo = process.env.GITHUB_REPO || undefined;
+const githubConfigured = Boolean(githubToken && githubRepo);
+
 const llmConfig: LlmConfig = {
   provider: provider as LlmConfig["provider"],
   model,
@@ -43,7 +49,10 @@ const agentConfig: AgentConfig = {
   role: agentRole,
   llmConfig,
   systemPrompt: getSystemPrompt(department, agentRole),
-  tools: ["web_search", "write_file", "read_file", "create_task", "http_request", "exec_code"],
+  tools: [
+    "web_search", "write_file", "read_file", "create_task", "http_request", "exec_code",
+    ...(githubConfigured ? ["github_create_issue"] : []),
+  ],
   department,
   maxConcurrentTasks: maxConcurrent,
 };
@@ -80,16 +89,25 @@ const requireSandbox = process.env.EXEC_CODE_REQUIRE_SANDBOX !== undefined
   : requireSandboxDefault;
 
 const toolRegistry = new ToolRegistry();
-registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, department, currentTaskId, createdByParent, createdIdsByParent, requireSandbox, apiToken: orchApiToken });
+registerBuiltInTools(toolRegistry, {
+  orchUrl, tenantId: deploymentId, agentId: agentConfig.id, department,
+  currentTaskId, createdByParent, createdIdsByParent, requireSandbox, apiToken: orchApiToken,
+  github: { token: githubToken, defaultRepo: githubRepo },
+});
 
 // Comma-separated tool names that require human approval before running,
 // e.g. "exec_code,http_request". APPROVAL_REQUIRED_TOOLS always wins when
-// set. Otherwise engops defaults to gating exec_code — arbitrary shell
+// set. Otherwise: engops defaults to gating exec_code — arbitrary shell
 // execution against real infra is the highest-blast-radius tool in the
 // registry, and engops is the only department whose prompts (runbooks,
-// deploys, rollbacks) routinely ask for it. Every other department defaults
-// to no gate. Rollout decision from the 2026-07-12 Phase 2 build.
-const defaultApprovalRequiredTools = department === "engops" ? "exec_code" : "";
+// deploys, rollbacks) routinely ask for it. product defaults to gating
+// github_create_issue — it's the first tool with a real, external,
+// hard-to-undo side effect (files a public/real issue) that department can
+// reach, added alongside the tool itself (Phase 4, 2026-07-13). Every other
+// department/tool combination defaults to no gate.
+const defaultApprovalRequiredTools =
+  department === "engops" ? "exec_code" :
+  department === "product" ? "github_create_issue" : "";
 const approvalRequiredTools = (process.env.APPROVAL_REQUIRED_TOOLS ?? defaultApprovalRequiredTools)
   .split(",")
   .map((t) => t.trim())
