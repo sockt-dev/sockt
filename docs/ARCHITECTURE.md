@@ -342,6 +342,126 @@ sequenceDiagram
   conversation field) so the next Plan phase reads it as part of the task
   context.
 
+## Output Verification Gate
+
+HITL (above) stops an agent from *acting* unsafely. This is the second half:
+stopping an agent from *reporting* falsely — the capability-hallucination
+problem (a fabricated "email sent") plus a broader class the first eval pass
+also found: deliverables missing required structure (no rollback section,
+no non-goals), silently exceeding stated limits (a "under 150 words" cold
+email that's actually 300), or containing unfilled template artifacts
+(`[placeholder]` text nobody replaced). Built 2026-07-12, Phase 2 of the
+same production-hardening pass as the task graph section above.
+
+**Not an LLM judge.** Every check here is deterministic — a regex, a word
+count, a section-heading scan. This catches only the code-checkable half of
+"is this output any good"; see the scope note in
+[evals/test-plan.md](../evals/test-plan.md)'s Phase 3.1 status update for
+why a real judge is explicitly a separate, harder, not-yet-built piece of
+work.
+
+```mermaid
+sequenceDiagram
+    participant Runner as AgentRunner
+    participant Gate as runOutputGate
+    participant Plan as planPhase/reflectPhase
+
+    Runner->>Runner: reflect.complete (or budget/attempt exhaustion)
+    Runner->>Runner: finalizeCompletion(ctx, proposedOutput, attemptsRemaining)
+    Runner->>Gate: runOutputGate({output, artifacts, trace, skill, task, department})
+    alt gate passes
+        Gate-->>Runner: {pass:true, annotatedOutput}
+        Runner-->>Runner: TaskOutcome{status:"completed", output:annotatedOutput}
+    else gate fails, attempts remain
+        Gate-->>Runner: {pass:false, feedback}
+        Runner->>Runner: ctx.gateFeedback.push(feedback); continue attempt loop
+        Runner->>Plan: next Plan/Reflect call includes gateFeedback as an explicit message
+    else gate fails, no attempts left
+        Gate-->>Runner: {pass:false, blockers}
+        Runner-->>Runner: TaskOutcome{status:"escalated", reason:"Output failed verification: ..."}
+    end
+```
+
+- **`runOutputGate`** (`packages/runtime/src/verification/output-gate.ts`) is
+  pure — no I/O, same pattern as `hallucination-check.ts`. Always runs one
+  built-in regardless of skill: `capabilityClaimWithoutTool` (a refactor of
+  the existing `hasUnbackedCapabilityClaim`, split so the gate can test a
+  *candidate* output before it becomes the trace's outcome — see
+  `packages/runtime/src/skills/hallucination-check.ts`). A fabricated
+  "email sent" now fails the gate and never reaches `SlackReplyTelemetry`,
+  instead of only being caught after the fact by the offline
+  `SKILL_COMPILE_ENABLED` gate on skill compilation.
+- **Skill selection** (`AgentRunner.resolveGateSkill`): if
+  `task.targetSkill` is set (via `create_task`'s `skill` param — see the
+  Task Graph section above), `SkillCompiler.loadByName(name)` loads that
+  skill deterministically. Otherwise falls back to
+  `ctx.matchedSkills[0]` — the top hit from the `findRelevant()` call
+  `runLoop` already made for skill-context injection, now also captured on
+  `ExecutionContext` instead of being discarded after use.
+- **Checkable rules — `SkillFile.checks`** (`packages/runtime/src/types.ts`):
+  an optional array alongside `successCriteria`, added because NLP-parsing
+  free-text criteria isn't reliable. Each entry names the `successCriteria`
+  string it enforces plus a `type` and type-specific params, e.g.:
+
+  ```json
+  { "criterion": "Rollback section is complete and tested", "type": "section_present", "heading": "Rollback", "minChars": 40 }
+  ```
+
+  Evaluators for `section_present`, `regex_present`, `regex_absent`,
+  `max_words` (whole-output or `per_section`, for multi-variant outreach
+  copy), and `count_range` live in
+  `packages/runtime/src/verification/checks.ts`. Five more types
+  (`lead_provenance`, `computed_number`, `metric_sourcing`,
+  `grounded_quotes`, `evidence_citation`) are declared in the `SkillCheck`
+  union already — some Phase-2-authored skills reference them ahead of
+  time — but have no evaluator yet; `output-gate.ts` routes any check whose
+  type isn't in `checks.ts`'s dispatch table to `GateResult.humanReview`
+  rather than blocking or crashing, so those checks degrade gracefully
+  until their evaluators land in Phase 3.
+  `checks` authored so far: `growth/outreach-copy.skill`,
+  `product/spec-writing.skill`, `engops/runbook-writer.skill`,
+  `engops/incident-responder.skill` — the four skills the first eval pass
+  had confirmed, checkable assertions for. Every other bundled skill still
+  has `successCriteria` but no `checks` array, so all of it routes to
+  human review — the framework catches nothing there yet, it just doesn't
+  block anything either.
+- **Unmapped criteria policy**: any `successCriteria` entry with no
+  matching `checks` entry (by exact string match) also lands in
+  `humanReview`, never blocking. When `OUTPUT_GATE_REVIEW_FOOTER` (default
+  `true`) is set, `annotatedOutput` appends every warning- and
+  human-review criterion as
+  `\n\n_Unverified (needs human review): <criterion 1>; <criterion 2>_` so
+  the human reading the Slack reply knows what wasn't mechanically
+  confirmed.
+- **Severity**: each check defaults to `"block"` (fails the gate) but can
+  set `"severity": "warn"` to only annotate, never block — used for softer
+  signals like a spec's baseline/target metric pattern.
+- **Retry feedback plumbing**: `planPhase` trims context to the system
+  prompt only by default (`PLAN_CONTEXT_MESSAGES=0`), so a failed gate's
+  feedback is threaded through explicitly rather than relying on message
+  history — `ExecutionContext.gateFeedback: string[]` (one entry per failed
+  attempt), read by both `planPhase` and `reflectPhase`
+  (`packages/runtime/src/runner/plan.ts`,
+  `packages/runtime/src/runner/reflect.ts`) and injected as its own message
+  so the next attempt actually sees why the previous one failed, and
+  `reflectPhase` doesn't just immediately re-declare the same output
+  complete.
+- **`reflectPhase` full-output change**: intermediate step summaries stay
+  capped at 120 characters, but the final deliverable (the last `write_file`
+  call's content, or the last act step's output if there was no
+  `write_file`) is now appended untruncated (up to `REFLECT_OUTPUT_CHARS`,
+  default 6000) — otherwise reflect's `"output"` field, and therefore the
+  gate's input, was drawn from a 120-char fragment instead of the real
+  artifact.
+- **Disabling**: `OUTPUT_GATE_ENABLED=false` (resolved in `serve.ts` into
+  `AgentRunnerConfig.outputGateEnabled`) skips the gate entirely — every
+  completion is accepted as-is. Off by default only if explicitly set;
+  the gate runs by default.
+- **Join interaction**: a task that's about to block on its `create_task`
+  children (see Task Graph below) is checked *before* the output gate runs
+  — there's no real "final output" to verify yet when the run is actually
+  waiting on subtasks, so `maybeBlockOnChildren` still takes priority.
+
 ## Task Graph: Targeting, Ordering, and Joins
 
 `create_task` (`packages/runtime/src/tools/built-in/create_task.ts`) is how an

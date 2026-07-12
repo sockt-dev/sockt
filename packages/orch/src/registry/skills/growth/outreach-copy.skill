@@ -20,6 +20,13 @@
     "One and only one CTA",
     "No feature-dumping — focuses on prospect outcome"
   ],
+  "checks": [
+    { "criterion": "Message is under 150 words for cold outreach", "type": "max_words", "limit": 150, "scope": "per_section" },
+    { "criterion": "One and only one CTA", "type": "human_review" },
+    { "criterion": "Opening line is personalised and not generic", "type": "human_review" },
+    { "criterion": "No feature-dumping — focuses on prospect outcome", "type": "human_review" },
+    { "criterion": "No unfilled placeholder tokens", "type": "regex_absent", "pattern": "\\[(?:placeholder|name|company|first.?name|insert[^\\]]*)\\]|\\{\\{[^}]*\\}\\}", "flags": "i", "message": "Output contains unfilled [placeholder] / {{token}} text" }
+  ],
   "compiledFrom": "thatrebeccarae/claude-marketing@copywriting-frameworks + iamzifei/show-me-the-money@money-outreach",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

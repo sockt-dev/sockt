@@ -121,6 +121,11 @@ const skillsDir = process.env.SKILLS_DIR ?? defaultSkillsDir;
 const scratchDir = expandHome(process.env.SCRATCH_DIR ?? `${homedir()}/.sockt/scratch`);
 const traceLogPath = expandHome(process.env.TRACE_LOG_PATH ?? `${scratchDir}/traces.jsonl`);
 
+// See verification/output-gate.ts and docs/ARCHITECTURE.md's output gate
+// section. Default on — set OUTPUT_GATE_ENABLED=false to accept every
+// completion as-is (e.g. for local debugging without a skills dir).
+const outputGateEnabled = process.env.OUTPUT_GATE_ENABLED !== "false";
+
 const runner = new AgentRunner({
   llmClient,
   toolRegistry,
@@ -129,6 +134,7 @@ const runner = new AgentRunner({
   traceLogPath: traceLogPath || undefined,
   hitlGate,
   orchApiToken,
+  outputGateEnabled,
 });
 
 // Self-register with orchestrator (retry until orch is ready)

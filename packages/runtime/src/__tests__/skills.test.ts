@@ -79,6 +79,23 @@ describe("SkillCompiler", () => {
     const results = await compiler.findRelevant("zzzzzzuniquezzzzz", 5);
     expect(results).toHaveLength(0);
   });
+
+  test("loadByName loads a skill deterministically by exact name, no relevance scoring", async () => {
+    const compiler = new SkillCompiler(testDir);
+    const trace = new ExecutionTrace("task-load1", "agent-1");
+    trace.addStep({ phase: "act", action: "a", toolCall: { id: "1", name: "web-search", arguments: {} }, output: "r", durationMs: 0, timestamp: "2024-01-01T00:00:00Z" });
+    trace.setOutcome({ status: "completed", output: "done" });
+    const compiled = await compiler.compile(trace);
+
+    const loaded = await compiler.loadByName(compiled.name);
+    expect(loaded?.name).toBe(compiled.name);
+  });
+
+  test("loadByName returns null for a missing skill instead of throwing", async () => {
+    const compiler = new SkillCompiler(testDir);
+    const loaded = await compiler.loadByName("does-not-exist");
+    expect(loaded).toBeNull();
+  });
 });
 
 describe("scoreRelevance", () => {

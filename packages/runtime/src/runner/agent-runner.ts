@@ -4,7 +4,8 @@ import type { AgentConfig, LlmConfig, LlmRequest, ModelSelector, ModelSelectionC
 import { HttpOrchClient } from "../orch-client/client.ts";
 import { SkillCompiler } from "../skills/compiler.ts";
 import { hasUnbackedCapabilityClaim } from "../skills/hallucination-check.ts";
-import type { AgentRunnerConfig, ExecutionContext, TaskOutcome } from "../types.ts";
+import { runOutputGate, collectArtifacts } from "../verification/output-gate.ts";
+import type { AgentRunnerConfig, ExecutionContext, SkillFile, TaskOutcome } from "../types.ts";
 import { buildExecutionContext, injectSkillContext } from "./context.ts";
 import { planPhase } from "./plan.ts";
 import { actPhase } from "./act.ts";
@@ -99,6 +100,73 @@ export class AgentRunner {
     return { status: "blocked", dependency: `${AWAITING_CHILDREN_PREFIX}${childIds.join(",")}` };
   }
 
+  /** Picks the skill whose `checks` apply to this task's output, per
+   * spec §1.4: an explicit task.targetSkill (set by create_task's `skill`
+   * param, see docs/ARCHITECTURE.md) is deterministic and wins; otherwise
+   * fall back to the top skill-matcher hit from runLoop's findRelevant call
+   * (ctx.matchedSkills). Null when neither is available — the gate still
+   * runs its always-on built-ins (capability-claim) in that case. */
+  private async resolveGateSkill(ctx: ExecutionContext): Promise<SkillFile | null> {
+    if (ctx.task.targetSkill && this.skillCompiler) {
+      const skill = await this.skillCompiler.loadByName(ctx.task.targetSkill);
+      if (skill) return skill;
+    }
+    return ctx.matchedSkills[0] ?? null;
+  }
+
+  /** Runs the output verification gate over a candidate completion output
+   * and decides what actually happens next:
+   *  - gate passes -> a "completed" outcome carrying the (possibly
+   *    human-review-annotated) output
+   *  - gate fails and another attempt is affordable -> pushes retry
+   *    feedback onto ctx.gateFeedback (read by planPhase/reflectPhase) and
+   *    returns null so the caller `continue`s the attempt loop
+   *  - gate fails with no attempts left -> escalates instead of silently
+   *    posting output that failed mechanical verification
+   * Disabled entirely (returns proposedOutput as-is, always "completed")
+   * when this.config.outputGateEnabled === false. */
+  private async finalizeCompletion(
+    ctx: ExecutionContext,
+    proposedOutput: string,
+    attemptsRemaining: boolean,
+  ): Promise<TaskOutcome | null> {
+    if (this.config.outputGateEnabled === false) {
+      return { status: "completed", output: proposedOutput };
+    }
+
+    const skill = await this.resolveGateSkill(ctx);
+    const gate = runOutputGate({
+      output: proposedOutput,
+      artifacts: collectArtifacts(ctx.trace),
+      trace: ctx.trace,
+      skill,
+      task: ctx.task,
+      department: ctx.agent.department ?? "general",
+    });
+
+    ctx.trace.addStep({
+      phase: "reflect",
+      action: "verify_output",
+      output: gate,
+      durationMs: 0,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (gate.pass) {
+      return { status: "completed", output: gate.annotatedOutput };
+    }
+
+    if (attemptsRemaining) {
+      ctx.gateFeedback.push(gate.feedback);
+      return null;
+    }
+
+    return {
+      status: "escalated",
+      reason: `Output failed verification: ${gate.blockers.map((b) => b.criterion).join("; ")}`,
+    };
+  }
+
   private async persistTrace(ctx: ExecutionContext): Promise<void> {
     if (!this.config.traceLogPath) return;
     await mkdir(dirname(this.config.traceLogPath), { recursive: true });
@@ -117,6 +185,7 @@ export class AgentRunner {
 
     if (this.skillCompiler) {
       const skills = await this.skillCompiler.findRelevant(task.description, 3);
+      ctx.matchedSkills = skills;
       injectSkillContext(ctx, skills);
     }
 
@@ -194,7 +263,15 @@ export class AgentRunner {
       // ── REFLECT ──
       if (!this.reflectionEnabled) {
         const blocked = this.maybeBlockOnChildren(ctx);
-        const outcome: TaskOutcome = blocked ?? { status: "completed", output: "Task steps executed" };
+        if (blocked) {
+          ctx.trace.setOutcome(blocked);
+          return blocked;
+        }
+        // No budget concern once reflection is disabled entirely — no reflect
+        // step exists to decide "try again", so a gate failure here escalates
+        // rather than looping (spec §1.5: attemptsRemaining = false).
+        const outcome = await this.finalizeCompletion(ctx, "Task steps executed", false);
+        if (outcome === null) continue; // defensive — finalizeCompletion(..., false) never returns null
         ctx.trace.setOutcome(outcome);
         if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;
@@ -207,7 +284,12 @@ export class AgentRunner {
           .map(s => typeof s.output === "string" ? s.output : JSON.stringify(s.output ?? ""))
           .pop() ?? "Task steps executed";
         const blocked = this.maybeBlockOnChildren(ctx);
-        const outcome: TaskOutcome = blocked ?? { status: "completed", output: lastObservation };
+        if (blocked) {
+          ctx.trace.setOutcome(blocked);
+          return blocked;
+        }
+        const outcome = await this.finalizeCompletion(ctx, lastObservation, false);
+        if (outcome === null) continue; // defensive — finalizeCompletion(..., false) never returns null
         ctx.trace.setOutcome(outcome);
         if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;
@@ -225,7 +307,13 @@ export class AgentRunner {
 
       if (reflection.complete) {
         const blocked = this.maybeBlockOnChildren(ctx);
-        const outcome: TaskOutcome = blocked ?? { status: "completed", output: reflection.output ?? "" };
+        if (blocked) {
+          ctx.trace.setOutcome(blocked);
+          return blocked;
+        }
+        const attemptsRemaining = attempt < task.maxAttempts - 1 && ctx.budgetRemaining > 2;
+        const outcome = await this.finalizeCompletion(ctx, reflection.output ?? "", attemptsRemaining);
+        if (outcome === null) continue; // gate failed with attempts left — retry with ctx.gateFeedback populated
         ctx.trace.setOutcome(outcome);
         if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;

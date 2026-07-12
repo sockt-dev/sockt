@@ -1,6 +1,14 @@
 import type { LlmClient } from "@sockt/types";
 import type { ExecutionContext, ReflectionResult } from "../types.ts";
 
+// Intermediate steps stay capped at 120 chars each (stepSummary below) —
+// enough to reflect on progress without ballooning context. The FINAL
+// deliverable is different: reflect's "output" field needs to be drawn from
+// the real artifact, not a 120-char fragment of it, or the output gate
+// (verification/output-gate.ts) ends up verifying a summary instead of the
+// thing that would actually get posted.
+const REFLECT_OUTPUT_CHARS = Number(process.env.REFLECT_OUTPUT_CHARS ?? 6000);
+
 const REFLECT_INSTRUCTION = `Reflect on the actions taken and their results.
 Determine if the task is complete, needs more work, or should be escalated.
 
@@ -29,13 +37,35 @@ export async function reflectPhase(
     })
     .join("\n");
 
-  const summaryMessage = stepSummary
+  let summaryMessage = stepSummary
     ? `Steps completed:\n${stepSummary}`
     : "No steps recorded.";
+
+  // Prefer the last write_file's full content (the actual deliverable);
+  // fall back to the last act step's untruncated output otherwise.
+  const lastWriteFile = [...steps].reverse().find((s) => s.phase === "act" && s.toolCall?.name === "write_file");
+  const lastAct = [...steps].reverse().find((s) => s.phase === "act");
+  const finalArtifact = lastWriteFile
+    ? String((lastWriteFile.toolCall!.arguments as Record<string, unknown> | undefined)?.content ?? "")
+    : lastAct
+      ? (typeof lastAct.output === "string" ? lastAct.output : JSON.stringify(lastAct.output ?? ""))
+      : "";
+  if (finalArtifact) {
+    summaryMessage += `\n\nFull content of the final deliverable:\n${finalArtifact.slice(0, REFLECT_OUTPUT_CHARS)}`;
+  }
+
+  // A prior attempt failed the output verification gate — see plan.ts's
+  // matching injection and verification/output-gate.ts. Without this,
+  // reflect would immediately re-declare the same (already-failed) output
+  // complete, since its only view of "what happened" is the step summary.
+  const gateFeedback = ctx.gateFeedback.length
+    ? [{ role: "user" as const, content: ctx.gateFeedback.at(-1)! }]
+    : [];
 
   const reflectMessages = [
     ctx.messages[0], // system prompt only
     { role: "user" as const, content: summaryMessage },
+    ...gateFeedback,
     { role: "user" as const, content: REFLECT_INSTRUCTION },
   ].filter((m): m is NonNullable<typeof m> => m !== undefined);
 

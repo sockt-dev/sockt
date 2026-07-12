@@ -43,8 +43,16 @@ export async function planPhase(
     ? [ctx.messages[0], ...ctx.messages.slice(-contextLimit)]
     : ctx.messages.slice(0, 1); // system prompt only by default (token-efficient)
   const instruction = buildPlanInstruction(stepsAllowed, toolRegistry);
+  // A prior attempt's output failed the output verification gate (see
+  // verification/output-gate.ts) — surface that feedback explicitly, since
+  // planHistory is trimmed to the system prompt only by default
+  // (PLAN_CONTEXT_MESSAGES=0) and would otherwise never reach this attempt.
+  const gateFeedback = ctx.gateFeedback.length
+    ? [{ role: "user" as const, content: ctx.gateFeedback.at(-1)! }]
+    : [];
   const planMessages = [
     ...planHistory.filter((m): m is NonNullable<typeof m> => m !== undefined),
+    ...gateFeedback,
     { role: "user" as const, content: instruction },
   ];
 

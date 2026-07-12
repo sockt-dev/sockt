@@ -33,6 +33,20 @@ export class SkillCompiler {
     return skill;
   }
 
+  /** Loads exactly one skill by name — used by the output gate when
+   * task.targetSkill is set (a deterministic pick, no relevance scoring
+   * needed since create_task already named the skill). Null on a missing
+   * file or parse error rather than throwing, matching findRelevant's
+   * best-effort behavior. */
+  async loadByName(name: string): Promise<SkillFile | null> {
+    try {
+      const content = await Bun.file(`${this.outputDir}/${name}.skill`).text();
+      return JSON.parse(content) as SkillFile;
+    } catch {
+      return null;
+    }
+  }
+
   async findRelevant(description: string, limit = 3): Promise<SkillFile[]> {
     const glob = new Bun.Glob("*.skill");
     const scored: { skill: SkillFile; score: number }[] = [];

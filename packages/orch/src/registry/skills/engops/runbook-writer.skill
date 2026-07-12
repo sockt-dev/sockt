@@ -21,6 +21,11 @@
     "Rollback section is complete and tested",
     "Validation confirms actual system state not just command success"
   ],
+  "checks": [
+    { "criterion": "Rollback section is complete and tested", "type": "section_present", "heading": "Rollback", "minChars": 40 },
+    { "criterion": "Every command has expected output documented", "type": "regex_present", "pattern": "expected output", "flags": "i", "severity": "warn" },
+    { "criterion": "Runbook can be executed by someone who has never done it before", "type": "human_review" }
+  ],
   "compiledFrom": "aj-geddes/useful-ai-prompts@runbook-creation + community/incident-runbook-templates",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

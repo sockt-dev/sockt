@@ -20,6 +20,10 @@
     "Root cause identified with supporting evidence",
     "Post-mortem has timeline, 5 whys, and actionable prevention items"
   ],
+  "checks": [
+    { "criterion": "Severity classified with business impact quantified", "type": "regex_present", "pattern": "\\bP[0-3]\\b", "message": "State the explicit P-level (P0/P1/P2/P3)" },
+    { "criterion": "Root cause identified with supporting evidence", "type": "evidence_citation", "claimPattern": "root cause|caused by|due to", "minOverlapTokens": 4 }
+  ],
   "compiledFrom": "community/incident-responder + aj-geddes/useful-ai-prompts@runbook-creation",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

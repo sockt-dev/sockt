@@ -20,6 +20,13 @@
     "Non-goals section exists and is non-empty",
     "Success metrics are measurable with baseline and target values"
   ],
+  "checks": [
+    { "criterion": "Non-goals section exists and is non-empty", "type": "section_present", "heading": "Non-Goals", "minChars": 20 },
+    { "criterion": "Acceptance criteria present", "type": "section_present", "heading": "Acceptance Criteria", "minChars": 20 },
+    { "criterion": "Success metrics are measurable with baseline and target values", "type": "regex_present", "pattern": "baseline[\\s\\S]{0,200}target|target[\\s\\S]{0,200}baseline", "flags": "i", "severity": "warn" },
+    { "criterion": "Every requirement is testable — no vague words like 'fast' or 'easy'", "type": "human_review" },
+    { "criterion": "Spec is max 1 page for features, 3 pages for epics", "type": "human_review" }
+  ],
   "compiledFrom": "community/spec-to-code-compliance + davila7/claude-code-templates@ai-product",
   "compiledAt": "2026-07-04T00:00:00.000Z"
 }

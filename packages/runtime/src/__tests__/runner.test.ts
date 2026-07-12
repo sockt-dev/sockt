@@ -341,4 +341,76 @@ describe("AgentRunner", () => {
       server.stop();
     }
   });
+
+  test("output gate blocks a capability-claim completion, retries with feedback, and succeeds once the retry is clean", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "draft a reply"}]}',
+        "drafting...",
+        '{"complete": true, "output": "Email successfully sent to the full list."}',
+        '{"steps": [{"description": "draft a reply"}]}',
+        "drafting...",
+        '{"complete": true, "output": "Drafted the copy for review."}',
+      ]);
+
+      const runner = new AgentRunner({ llmClient, toolRegistry: new ToolRegistry(), orchBaseUrl: url });
+      const task = { ...mockTask, maxAttempts: 3 };
+
+      const result = await runner.executeTask(mockAgent, task);
+      expect(result.status).toBe("completed");
+      if (result.status === "completed") {
+        expect(result.output).toBe("Drafted the copy for review.");
+      }
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("output gate escalates instead of completing when no attempts remain", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "draft a reply"}]}',
+        "drafting...",
+        '{"complete": true, "output": "Email successfully sent to the full list."}',
+      ]);
+
+      const runner = new AgentRunner({ llmClient, toolRegistry: new ToolRegistry(), orchBaseUrl: url });
+      const task = { ...mockTask, maxAttempts: 1 };
+
+      const result = await runner.executeTask(mockAgent, task);
+      expect(result.status).toBe("escalated");
+      if (result.status === "escalated") {
+        expect(result.reason).toContain("Output failed verification");
+      }
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("outputGateEnabled: false accepts a capability-claim completion as-is", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "draft a reply"}]}',
+        "drafting...",
+        '{"complete": true, "output": "Email successfully sent to the full list."}',
+      ]);
+
+      const runner = new AgentRunner({ llmClient, toolRegistry: new ToolRegistry(), orchBaseUrl: url, outputGateEnabled: false });
+      const task = { ...mockTask, maxAttempts: 1 };
+
+      const result = await runner.executeTask(mockAgent, task);
+      expect(result.status).toBe("completed");
+      if (result.status === "completed") {
+        expect(result.output).toBe("Email successfully sent to the full list.");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });

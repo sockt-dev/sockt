@@ -23,6 +23,8 @@ export function buildExecutionContext(
     trace,
     budgetRemaining: task.llmCallsBudget - task.llmCallsUsed,
     signal,
+    matchedSkills: [],
+    gateFeedback: [],
   };
 }
 

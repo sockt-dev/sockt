@@ -35,12 +35,14 @@ const task: Task = {
   updatedAt: "2024-01-01T00:00:00Z",
 };
 
-function llmThatReturns(content: string): { client: LlmClient; capturedPrompt: () => string } {
+function llmThatReturns(content: string): { client: LlmClient; capturedPrompt: () => string; capturedAllMessages: () => string } {
   let lastPrompt = "";
+  let allMessages = "";
   const client: LlmClient = {
     async chat(req: LlmRequest): Promise<LlmResponse> {
       const last = req.messages[req.messages.length - 1];
       lastPrompt = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
+      allMessages = req.messages.map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))).join("\n---\n");
       return {
         message: { role: "assistant", content },
         usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
@@ -51,7 +53,7 @@ function llmThatReturns(content: string): { client: LlmClient; capturedPrompt: (
     async *stream() { yield { delta: "chunk" }; },
     async countTokens() { return 10; },
   };
-  return { client, capturedPrompt: () => lastPrompt };
+  return { client, capturedPrompt: () => lastPrompt, capturedAllMessages: () => allMessages };
 }
 
 function makeContext() {
@@ -62,6 +64,8 @@ function makeContext() {
     trace: new ExecutionTrace(task.id, agent.id),
     budgetRemaining: 10,
     signal: new AbortController().signal,
+    matchedSkills: [],
+    gateFeedback: [] as string[],
   };
 }
 
@@ -142,5 +146,27 @@ describe("planPhase tool grounding", () => {
 
     expect(result.steps).toHaveLength(2);
     expect(result.steps.every((s) => s.tool === undefined)).toBe(true);
+  });
+
+  test("a pending output-gate failure from ctx.gateFeedback is surfaced to the model", async () => {
+    // planHistory is trimmed to the system prompt only by default
+    // (PLAN_CONTEXT_MESSAGES=0) — without explicit injection, gate feedback
+    // from a prior failed attempt would never reach this Plan call.
+    const registry = new ToolRegistry();
+    const { client, capturedAllMessages } = llmThatReturns('{"steps": [{"description": "retry"}]}');
+    const ctx = makeContext();
+    ctx.gateFeedback.push("Your previous attempt produced output that FAILED mechanical verification. Fix ALL of these before finishing:\n- Message is under 150 words: found 200 words.");
+
+    await planPhase(ctx, client, 5, registry);
+
+    expect(capturedAllMessages()).toContain("FAILED mechanical verification");
+    expect(capturedAllMessages()).toContain("found 200 words");
+  });
+
+  test("no gate feedback message is added when ctx.gateFeedback is empty", async () => {
+    const registry = new ToolRegistry();
+    const { client, capturedAllMessages } = llmThatReturns('{"steps": [{"description": "do it"}]}');
+    await planPhase(makeContext(), client, 5, registry);
+    expect(capturedAllMessages()).not.toContain("FAILED mechanical verification");
   });
 });

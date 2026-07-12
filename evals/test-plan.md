@@ -240,3 +240,75 @@ evaluators (lead provenance, computed-number, metric-sourcing,
 grounded-quotes, evidence-citation), a `github_create_issue` tool +
 product-approval default, and HITL ergonomics (reminder pings,
 re-request-after-timeout, read-only tool allowlist bypass).
+
+## Status update — 2026-07-13: production-hardening Phase 2 (output verification gate) shipped
+
+Same Fable spec as Phase 1 above — its own §8 "Rollout order" explicitly
+scopes Phase 2 to the gate *framework* plus the capability-claim built-in
+plus authoring `checks` for the four skills the original eval pass had
+confirmed, checkable assertions for. The remaining check types
+(`lead_provenance`, `computed_number`, `metric_sourcing`, `grounded_quotes`,
+`evidence_citation`) and the rest of the skill authoring are Phase 3 —
+correctly still open, not a gap in this phase.
+
+**Shipped:**
+
+- **`runOutputGate`** (`packages/runtime/src/verification/output-gate.ts`) —
+  a pure, deterministic gate that runs on every task completion (all three
+  completion paths: reflect-complete, budget-exhausted, reflection-disabled)
+  before an outcome is accepted. Always runs the capability-claim check
+  regardless of skill; additionally runs whichever skill's `checks[]` apply
+  (deterministic via `task.targetSkill`, else the top `findRelevant()` hit).
+- **The capability-hallucination fix now lands *before* the reply goes out**,
+  not just after. `hasUnbackedCapabilityClaim` (gates offline skill
+  compilation, existing since Phase 3.1 of the 2026-07-12 pass) is refactored
+  into a thin wrapper around the new `capabilityClaimWithoutTool`, which the
+  gate calls on the *candidate* output before it ever becomes the trace's
+  outcome. A fabricated "email sent" now fails the gate, retries with
+  explicit feedback, and escalates instead of posting to Slack if it
+  persists — previously it would post immediately and only get flagged
+  after the fact (or not at all, since skill-compile gating is opt-in).
+- **Five check types implemented**: `section_present`, `regex_present`,
+  `regex_absent`, `max_words` (whole-output or per-section), `count_range`.
+  Unimplemented types declared in the `SkillCheck` union
+  (`lead_provenance`, `computed_number`, `metric_sourcing`,
+  `grounded_quotes`, `evidence_citation` — Phase 3) degrade to
+  `GateResult.humanReview` rather than blocking or crashing when
+  referenced ahead of their evaluator, same as any `successCriteria` entry
+  with no matching check at all.
+- **`checks[]` authored** for `growth/outreach-copy.skill` (word limit +
+  no unfilled `[placeholder]`/`{{token}}` text), `product/spec-writing.skill`
+  (Non-Goals / Acceptance Criteria sections present),
+  `engops/runbook-writer.skill` (Rollback section present),
+  `engops/incident-responder.skill` (explicit P-level required).
+- **Retry feedback plumbing**: `ExecutionContext` gained `gateFeedback`
+  (consumed by both `planPhase` and `reflectPhase`, since `planPhase` trims
+  to the system prompt only by default and would otherwise never see why
+  the previous attempt failed) and `matchedSkills` (the `findRelevant()`
+  result, previously discarded after skill-context injection, now reused
+  for gate skill selection).
+- **`reflectPhase`** now appends the full final deliverable (last
+  `write_file` content, or last act step's raw output) to its summary
+  instead of only the existing 120-char-per-step truncation — otherwise the
+  gate would be verifying a summary fragment instead of the real output.
+- **`SkillCompiler.loadByName`** — deterministic single-skill load by name,
+  alongside the existing relevance-scored `findRelevant`.
+- **`OUTPUT_GATE_ENABLED=false`** escape hatch (default on), resolved in
+  `serve.ts`.
+- Full detail: [ARCHITECTURE.md#output-verification-gate](../docs/ARCHITECTURE.md#output-verification-gate).
+
+**Verification:** automated tests only (`verification/output-gate.ts` +
+`checks.ts` + `evidence.ts` unit tests, `hallucination-check.test.ts`'s new
+`capabilityClaimWithoutTool` describe block, `plan.test.ts`/`reflect.test.ts`
+gate-feedback-injection tests, `skills.test.ts`'s `loadByName` tests, and
+`runner.test.ts`'s three end-to-end gate-wiring tests: blocks-then-retries,
+escalates-with-no-attempts-left, and the `outputGateEnabled: false` bypass)
+— **not yet live-verified against a real Slack workspace.** Same caveat as
+Phase 1 above: implemented-and-unit-tested, not yet field-confirmed.
+
+**Not yet done (Phase 3, per the spec's own rollout order):** the five
+remaining check evaluators, `checks[]` authoring for the other six bundled
+skills (lead-generation, growth-metrics, product-manager, user-research,
+github-issues, devops-troubleshooter), and the product-department
+metric-sourcing built-in (spec §3.2 — distinct from the capability-claim
+built-in shipped here).
