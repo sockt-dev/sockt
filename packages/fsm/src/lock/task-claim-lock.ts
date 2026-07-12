@@ -15,6 +15,8 @@ interface TaskRow {
   llm_calls_budget: number;
   attempt_count: number;
   max_attempts: number;
+  target_department: string | null;
+  target_role: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +34,8 @@ function mapRow(row: TaskRow): Task {
     llmCallsBudget: row.llm_calls_budget,
     attemptCount: row.attempt_count,
     maxAttempts: row.max_attempts,
+    targetDepartment: row.target_department,
+    targetRole: row.target_role,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
