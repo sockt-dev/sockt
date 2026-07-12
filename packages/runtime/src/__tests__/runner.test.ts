@@ -283,4 +283,62 @@ describe("AgentRunner", () => {
       server.stop();
     }
   });
+
+  test("completing after delegating via create_task blocks on the children instead of replying early", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const toolRegistry = new ToolRegistry();
+      toolRegistry.register(
+        { name: "create_task", description: "delegate", parameters: {} },
+        async () => ({ taskId: "child-1", status: "pending" }),
+      );
+
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "Delegate lead gen", "tool": "create_task", "args": {"description": "Generate leads", "skill": "lead-generation"}}]}',
+        '{"complete": true, "output": "Delegated to a subtask."}',
+      ]);
+
+      const runner = new AgentRunner({ llmClient, toolRegistry, orchBaseUrl: url });
+
+      const result = await runner.executeTask(mockAgent, mockTask);
+      expect(result.status).toBe("blocked");
+      if (result.status === "blocked") {
+        expect(result.dependency).toBe("awaiting-children:child-1");
+      }
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("a resumed join (description contains the join marker) completes normally instead of re-blocking", async () => {
+    const { server, url } = createMockOrchServer();
+
+    try {
+      const toolRegistry = new ToolRegistry();
+      toolRegistry.register(
+        { name: "create_task", description: "delegate", parameters: {} },
+        async () => ({ taskId: "child-2", status: "pending" }),
+      );
+
+      const llmClient = createMockLlmClient([
+        '{"steps": [{"description": "Synthesize the results"}]}',
+        '{"complete": true, "output": "Here is the combined lead list and outreach copy."}',
+      ]);
+
+      const runner = new AgentRunner({ llmClient, toolRegistry, orchBaseUrl: url });
+      const resumedTask: Task = {
+        ...mockTask,
+        description: `${mockTask.description}\n\n[join] All subtasks finished. Results:\n[1] (completed) ...`,
+      };
+
+      const result = await runner.executeTask(mockAgent, resumedTask);
+      expect(result.status).toBe("completed");
+      if (result.status === "completed") {
+        expect(result.output).toBe("Here is the combined lead list and outreach copy.");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });

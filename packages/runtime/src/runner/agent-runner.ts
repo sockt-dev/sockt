@@ -12,6 +12,14 @@ import type { ActResult } from "./act.ts";
 import { observePhase } from "./observe.ts";
 import { reflectPhase } from "./reflect.ts";
 
+// Must match packages/orch/src/join/parent-join.ts's constants of the same
+// name exactly — runtime has no package dependency on orch (communication
+// is HTTP-only, by design), so this contract is duplicated rather than
+// imported, the same way HITL decision status strings already cross this
+// boundary as plain strings rather than a shared type.
+const AWAITING_CHILDREN_PREFIX = "awaiting-children:";
+const JOIN_MARKER = "[join] All subtasks finished.";
+
 export class ConfigBasedSelector implements ModelSelector {
   async select(request: LlmRequest, _context: ModelSelectionContext): Promise<LlmConfig> {
     return request.config;
@@ -64,6 +72,31 @@ export class AgentRunner {
 
   getState(taskId: string): ExecutionContext | null {
     return this.runningContexts.get(taskId) ?? null;
+  }
+
+  /** taskIds returned by every successful create_task call in this trace,
+   * in order. Used to decide whether "complete" should actually mean
+   * "blocked, waiting on the subtasks I just delegated to" instead. */
+  private childTaskIds(ctx: ExecutionContext): string[] {
+    return ctx.trace.getSteps()
+      .filter((s) => s.phase === "act" && s.toolCall?.name === "create_task")
+      .map((s) => (s.output as { taskId?: string } | undefined)?.taskId)
+      .filter((id): id is string => typeof id === "string");
+  }
+
+  /** If this run delegated via create_task and hasn't already been resumed
+   * from a prior join (checked via JOIN_MARKER in the task description —
+   * see parent-join.ts), "complete" actually means "wait for the children,
+   * then synthesize" — return a blocked outcome instead of completing, so
+   * the parent doesn't post a reply while subtasks are still running and
+   * nothing ever aggregates their output into one final answer. Returns
+   * null when there's nothing to wait on and the caller should complete
+   * normally. */
+  private maybeBlockOnChildren(ctx: ExecutionContext): TaskOutcome | null {
+    if (ctx.task.description.includes(JOIN_MARKER)) return null; // this run IS the resumed join
+    const childIds = this.childTaskIds(ctx);
+    if (childIds.length === 0) return null;
+    return { status: "blocked", dependency: `${AWAITING_CHILDREN_PREFIX}${childIds.join(",")}` };
   }
 
   private async persistTrace(ctx: ExecutionContext): Promise<void> {
@@ -160,9 +193,10 @@ export class AgentRunner {
 
       // ── REFLECT ──
       if (!this.reflectionEnabled) {
-        const outcome: TaskOutcome = { status: "completed", output: "Task steps executed" };
+        const blocked = this.maybeBlockOnChildren(ctx);
+        const outcome: TaskOutcome = blocked ?? { status: "completed", output: "Task steps executed" };
         ctx.trace.setOutcome(outcome);
-        await this.onComplete(ctx);
+        if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;
       }
 
@@ -172,9 +206,10 @@ export class AgentRunner {
           .filter(s => s.phase === "observe")
           .map(s => typeof s.output === "string" ? s.output : JSON.stringify(s.output ?? ""))
           .pop() ?? "Task steps executed";
-        const outcome: TaskOutcome = { status: "completed", output: lastObservation };
+        const blocked = this.maybeBlockOnChildren(ctx);
+        const outcome: TaskOutcome = blocked ?? { status: "completed", output: lastObservation };
         ctx.trace.setOutcome(outcome);
-        await this.onComplete(ctx);
+        if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;
       }
 
@@ -189,9 +224,10 @@ export class AgentRunner {
       });
 
       if (reflection.complete) {
-        const outcome: TaskOutcome = { status: "completed", output: reflection.output ?? "" };
+        const blocked = this.maybeBlockOnChildren(ctx);
+        const outcome: TaskOutcome = blocked ?? { status: "completed", output: reflection.output ?? "" };
         ctx.trace.setOutcome(outcome);
-        await this.onComplete(ctx);
+        if (outcome.status === "completed") await this.onComplete(ctx);
         return outcome;
       }
 

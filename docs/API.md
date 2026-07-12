@@ -26,7 +26,11 @@ Create a task.
   "parentId": null,           // optional — set to create a subtask
   "role": "architect",        // optional — used for creation validation, default "architect"
   "llmCallsBudget": 15,       // optional, default 25
-  "maxAttempts": 3            // optional, default 3
+  "maxAttempts": 3,           // optional, default 3
+  "targetDepartment": "growth", // optional — restricts which department's workers can claim this task
+  "targetRole": "worker",       // optional — restricts to "worker" or "architect"
+  "targetSkill": "outreach-copy", // optional — injected into the claiming worker's system prompt
+  "afterId": "019f2974-..."     // optional — task id that must reach status "completed" before this one is claimable
 }
 ```
 
@@ -44,12 +48,23 @@ Create a task.
   "llmCallsBudget": 15,
   "attemptCount": 0,
   "maxAttempts": 3,
+  "targetDepartment": "growth",
+  "targetRole": "worker",
+  "targetSkill": "outreach-copy",
+  "afterId": null,
   "createdAt": "2026-07-03T19:28:31.672Z",
   "updatedAt": "2026-07-03T19:28:31.672Z"
 }
 ```
 
 `403` if `fsm.validateCreation` rejects it (e.g. invalid parent/role combination).
+
+> Prior to 2026-07-12, `targetDepartment`/`targetRole`/`targetSkill`/`afterId`
+> were accepted in the request body but silently dropped before reaching the
+> store — a task created via `create_task` with an explicit `department`
+> never actually carried it, so every subtask was untagged and claimable by
+> any worker in any department. Fixed in
+> `packages/orch/src/api/routes/tasks.ts`.
 
 ### `GET /tasks`
 
@@ -70,6 +85,16 @@ List only `pending` tasks for a tenant — this is what `runtime` workers poll.
 **Query params:** `tenantId` (required)
 
 Returns `Task[]`. `400` if `tenantId` is missing.
+
+A task whose `afterId` names another task that hasn't reached `completed` is
+excluded from this list — it simply doesn't appear until its dependency
+finishes, no separate FSM state involved (`listPending` in
+`packages/fsm/src/store/sqlite-task-store.ts`). If the dependency instead
+lands on `escalated`/`cancelled`, the dependent is unblockable forever; a
+30s sweep in `OrchestratorApi` finds these via `listPendingWithDeadDependency()`
+and auto-cancels them with an explanatory `output` rather than leaving them
+stuck. See
+[ARCHITECTURE.md#task-graph-targeting-ordering-and-joins](ARCHITECTURE.md#task-graph-targeting-ordering-and-joins).
 
 > Note: this route is registered before `GET /tasks/:id` in the router so
 > that `/tasks/pending` doesn't get swallowed as an `:id` lookup — if you're
@@ -163,6 +188,15 @@ Transitions `in_progress → blocked`. `400` if task isn't `in_progress`.
 
 No body required. Sets status to `cancelled` from any active state. `404` if
 task doesn't exist.
+
+> `/complete`, `/escalate`, and `/cancel` (plus the budget-exhaustion branches
+> of `/record-llm-call` and `/llm-call`) all call `maybeResumeParent`
+> (`packages/orch/src/join/parent-join.ts`) after the transition succeeds. If
+> the task has a parent that's `blocked` waiting on it and its siblings as
+> part of a `create_task`-driven join, and every sibling has now reached a
+> terminal state, the parent is auto-resumed (`blocked → pending`, owner
+> cleared) with the combined child results appended to its description. See
+> [ARCHITECTURE.md#task-graph-targeting-ordering-and-joins](ARCHITECTURE.md#task-graph-targeting-ordering-and-joins).
 
 ### `POST /tasks/:id/retry`
 

@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 `;
 
+// Bun's sqlite CREATE TABLE IF NOT EXISTS means a column added after a
+// database already exists on disk (e.g. an existing ~/.sockt/scratch/orch.sqlite
+// from before this change) would otherwise never get it. Idempotent —
+// PRAGMA table_info is cheap and this runs once at startup.
+function ensureColumn(db: Database, table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
+}
+
 const CREATE_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status ON tasks(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner);
@@ -103,4 +114,10 @@ export function initializeSchema(db: Database): void {
   db.exec(CREATE_TASK_ORIGINS_INDEX);
   db.exec(CREATE_PENDING_HUMAN_INPUTS_TABLE);
   db.exec(CREATE_PENDING_HUMAN_INPUTS_INDEXES);
+
+  // Production-hardening additions (create_task targeting/ordering, HITL
+  // reminder pings) — see docs/ARCHITECTURE.md's task-graph section.
+  ensureColumn(db, "tasks", "target_skill", "TEXT");
+  ensureColumn(db, "tasks", "after_id", "TEXT REFERENCES tasks(id)");
+  ensureColumn(db, "pending_human_inputs", "reminded_at", "TEXT");
 }

@@ -49,7 +49,12 @@ export class HttpOrchClient implements OrchClient {
   }
 
   async listPending(tenantId: string): Promise<Task[]> {
-    return this.get<Task[]>(`/tasks?tenantId=${encodeURIComponent(tenantId)}&status=pending`);
+    // /tasks/pending (not /tasks?status=pending) — the dedicated route is
+    // backed by SqliteTaskStore.listPending(), which applies the after_id
+    // dependency filter (an ordered subtask doesn't appear here until its
+    // dependency has completed). /tasks?status=pending is the unfiltered
+    // admin/UI listing and must stay that way.
+    return this.get<Task[]>(`/tasks/pending?tenantId=${encodeURIComponent(tenantId)}`);
   }
 
   async createTask(task: TaskCreate): Promise<Task> {

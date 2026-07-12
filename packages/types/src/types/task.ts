@@ -17,6 +17,14 @@ export interface TaskCreate {
   maxAttempts?: number;
   targetDepartment?: string;
   targetRole?: string;
+  /** Exact worker skill this task needs (e.g. "lead-generation") — lets the
+   * output-verification gate pick a deterministic skill instead of relying
+   * purely on SkillCompiler.findRelevant()'s similarity match. */
+  targetSkill?: string;
+  /** taskId of a sibling subtask that must reach 'completed' before this one
+   * becomes claimable. Enforced as a query filter (see listPending), not a
+   * new FSM state — an ordered task just doesn't appear pending yet. */
+  afterId?: string;
 }
 
 export interface TaskPatch {

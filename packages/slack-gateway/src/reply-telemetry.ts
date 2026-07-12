@@ -91,11 +91,18 @@ export class SlackReplyTelemetry implements TelemetryEmitter {
       // will follow.
       if (event.type !== "task_blocked" && event.type !== "task_needs_input") this.pending.delete(event.taskId);
 
+      const dependency = String(event.data.dependency ?? "");
       const rawContent =
         event.type === "task_completed" ? String(event.data.output ?? "(no output)")
         : event.type === "task_escalated" ? `⚠️ Escalated: ${String(event.data.reason ?? "budget exceeded")}`
         : event.type === "task_needs_input" ? `❓ ${String(event.data.question ?? "Need more information to continue.")}`
-        : `⏸️ Blocked: ${String(event.data.dependency ?? "waiting on a human")}`;
+        // A parent that delegated via create_task and is waiting on its
+        // children isn't "blocked on a human" the way a HITL denial or a
+        // clarifying question is — say so, so a wait-in-progress doesn't
+        // read as something needing action.
+        : dependency.startsWith("awaiting-children:")
+          ? `⏳ Delegated to ${dependency.split(":")[1]?.split(",").length ?? "several"} subtask(s) — will reply here once they finish.`
+        : `⏸️ Blocked: ${dependency || "waiting on a human"}`;
       const content = markdownToSlackMrkdwn(rawContent);
 
       this.gateway

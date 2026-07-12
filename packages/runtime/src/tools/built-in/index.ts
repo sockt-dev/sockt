@@ -10,6 +10,10 @@ export interface BuiltInToolOptions {
   orchUrl: string;
   tenantId: string;
   agentId: string;
+  /** This worker's own department — create_task subtasks default to this
+   * department when the model doesn't explicitly set one, instead of being
+   * untagged and claimable by any worker in any department. */
+  department: string;
   /** Mutable ref the caller updates to the currently-executing task id before
    * each executeTask() call, so create_task can set the right parentId even
    * though this registry (and its handlers) are built once per process and
@@ -19,6 +23,11 @@ export interface BuiltInToolOptions {
    * re-plans within one execution don't re-create the same subtask. Caller
    * should clear the entry for a task id once that task finishes. */
   createdByParent: Map<string, Set<string>>;
+  /** Tracks taskIds (not descriptions) created per parent task id, so a
+   * later create_task's "after" ordering reference can be validated against
+   * a real subtask this execution created. Same clear-on-finish lifecycle
+   * as createdByParent. */
+  createdIdsByParent: Map<string, Set<string>>;
   /** When true, exec_code refuses to run (throws) instead of silently
    * falling back to an unsandboxed temp dir when sbx is unavailable. A human
    * approving a gated exec_code call (see APPROVAL_REQUIRED_TOOLS) is
@@ -43,7 +52,15 @@ export function registerBuiltInTools(registry: ToolRegistry, opts?: BuiltInToolO
   if (opts) {
     registry.register(
       createTaskDefinition,
-      makeCreateTaskHandler(opts.orchUrl, opts.tenantId, opts.currentTaskId, opts.createdByParent, opts.apiToken),
+      makeCreateTaskHandler(
+        opts.orchUrl,
+        opts.tenantId,
+        opts.department,
+        opts.currentTaskId,
+        opts.createdByParent,
+        opts.createdIdsByParent,
+        opts.apiToken,
+      ),
     );
   }
 }

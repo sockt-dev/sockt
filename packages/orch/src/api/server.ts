@@ -93,10 +93,31 @@ export class OrchestratorApi {
     // approval would otherwise sit "pending" forever. checkHitlApproval in
     // agent-runner.ts fails closed on any non-"approved" status, so a swept
     // timeout still results in the gated tool NOT running.
-    this.sweepInterval = setInterval(() => {
+    this.sweepInterval = setInterval(async () => {
       const swept = this.approvalStore.sweepTimeouts();
       if (swept.length > 0) {
         console.log(`[orch] swept ${swept.length} timed-out approval(s)`);
+      }
+
+      // A subtask ordered `after` a sibling that itself escalated/was
+      // cancelled can never satisfy listPending's "dependency completed"
+      // filter — it would otherwise sit pending forever, invisible to every
+      // worker, with nothing ever telling anyone it's stuck. Cancel it
+      // outright with a reason pointing at the dead dependency.
+      const dead = await deps.store.listPendingWithDeadDependency();
+      for (const t of dead) {
+        try {
+          await deps.store.update(t.id, {
+            status: "cancelled",
+            output: `Dependency ${t.afterId} failed (escalated or cancelled) — this subtask can never run.`,
+          });
+          deps.telemetry?.emit({ type: "task_cancelled", taskId: t.id, tenantId: t.tenantId, data: { reason: "dead_dependency", afterId: t.afterId } });
+        } catch (err) {
+          console.error(`[orch] failed to cancel dead-dependency task=${t.id}:`, err);
+        }
+      }
+      if (dead.length > 0) {
+        console.log(`[orch] cancelled ${dead.length} task(s) with a dead dependency`);
       }
     }, TIMEOUT_SWEEP_INTERVAL_MS);
   }

@@ -51,6 +51,8 @@ const validTask = {
   updatedAt: "2024-01-01T00:00:00.000Z",
   targetDepartment: null,
   targetRole: null,
+  targetSkill: null,
+  afterId: null,
 };
 
 const validMemoryEntry = {

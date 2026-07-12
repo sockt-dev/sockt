@@ -4,6 +4,7 @@ import type { LockManager } from "../../lock/lock-manager.ts";
 import type { TelemetryEmitter } from "@sockt/types";
 import type { QuestionStore } from "../question-store.ts";
 import type { TaskOriginStore } from "../../store/task-origin-store.ts";
+import { maybeResumeParent } from "../../join/parent-join.ts";
 
 export interface TaskRouteDeps {
   store: SqliteTaskStore;
@@ -49,6 +50,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       if (task && task.status === "in_progress") {
         await fsm.transition(taskId, "in_progress", "escalated", "system:budget");
         telemetry?.emit({ type: "task_budget_exhausted", taskId, tenantId: task.tenantId, data: {} });
+        await maybeResumeParent(store, fsm, telemetry, taskId);
       }
     }
     return c.json({ allowed: result.remaining > 0, remaining: result.remaining });
@@ -63,6 +65,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       lockManager.release(agentId ?? "unknown", taskId);
       const updated = await store.get(taskId);
       telemetry?.emit({ type: "task_completed", taskId, tenantId: task.tenantId, data: { output } });
+      await maybeResumeParent(store, fsm, telemetry, taskId);
       return c.json(updated);
     } catch {
       return c.json({ error: "Task is not in_progress" }, 400);
@@ -77,6 +80,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       await store.update(taskId, { output: reason });
       lockManager.release(agentId ?? "unknown", taskId);
       telemetry?.emit({ type: "task_escalated", taskId, tenantId: task.tenantId, data: { reason } });
+      await maybeResumeParent(store, fsm, telemetry, taskId);
       return c.json(task);
     } catch {
       return c.json({ error: "Task is not in_progress" }, 400);
@@ -141,6 +145,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       if (task && task.status === "in_progress") {
         await fsm.transition(taskId, "in_progress", "escalated", "system:budget");
         telemetry?.emit({ type: "task_budget_exhausted", taskId, tenantId: task.tenantId, data: {} });
+        await maybeResumeParent(store, fsm, telemetry, taskId);
       }
     }
     return c.json(result);
@@ -190,6 +195,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
     try {
       const updated = await store.update(taskId, { status: "cancelled" });
       telemetry?.emit({ type: "task_cancelled", taskId, tenantId: task.tenantId, data: {} });
+      await maybeResumeParent(store, fsm, telemetry, taskId);
       return c.json(updated);
     } catch {
       return c.json({ error: "Cannot cancel task" }, 400);
@@ -246,12 +252,23 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
 
   app.post("/tasks", async (c) => {
     const body = await c.req.json();
-    const { tenantId, description, parentId, role, llmCallsBudget, maxAttempts } = body;
+    // targetDepartment/targetRole/targetSkill/afterId were silently dropped
+    // here — create_task's caller could set them, but the row that actually
+    // landed in the DB never carried them, so every subtask was untagged and
+    // claimable by any worker in any department. `role` (the CREATING
+    // agent's role, used only for the worker-can't-create-top-level-tasks
+    // check below) is a distinct concept from `targetRole` (which
+    // department/role the new task is FOR) — don't conflate them.
+    const { tenantId, description, parentId, role, llmCallsBudget, maxAttempts,
+            targetDepartment, targetRole, targetSkill, afterId } = body;
     const validation = fsm.validateCreation(parentId ?? null, role ?? "architect");
     if (!validation.valid) {
       return c.json({ error: validation.reason }, 403);
     }
-    const task = await store.create({ tenantId, description, parentId, llmCallsBudget, maxAttempts });
+    const task = await store.create({
+      tenantId, description, parentId, llmCallsBudget, maxAttempts,
+      targetDepartment, targetRole, targetSkill, afterId,
+    });
     telemetry?.emit({ type: "task_created", taskId: task.id, tenantId, data: {} });
     return c.json(task, 201);
   });

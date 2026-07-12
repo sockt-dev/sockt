@@ -43,13 +43,21 @@ export function injectSkillContext(ctx: ExecutionContext, skills: SkillFile[]): 
 }
 
 function buildSystemPrompt(agent: AgentConfig, task: Task): string {
+  // Set by an architect's create_task "skill" param — a deterministic
+  // directive, not a hint, so the worker doesn't have to guess which skill
+  // applies from the description alone (see docs/ARCHITECTURE.md's
+  // create_task targeting section).
+  const skillDirective = task.targetSkill
+    ? `\n- Required skill: ${task.targetSkill} — follow that skill's workflow exactly.`
+    : "";
+
   return `${agent.systemPrompt}
 
 You are working on the following task:
 - Task ID: ${task.id}
 - Description: ${task.description}
 - Attempt: ${task.attemptCount + 1}/${task.maxAttempts}
-- Budget remaining: ${task.llmCallsBudget - task.llmCallsUsed} LLM calls
+- Budget remaining: ${task.llmCallsBudget - task.llmCallsUsed} LLM calls${skillDirective}
 
 You will operate in a Plan-Act-Observe-Reflect cycle. Follow instructions carefully.`;
 }

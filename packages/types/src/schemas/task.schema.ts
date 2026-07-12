@@ -17,6 +17,8 @@ export const TaskSchema = z.object({
   updatedAt: z.string().datetime(),
   targetDepartment: z.string().nullable(),
   targetRole: z.string().nullable(),
+  targetSkill: z.string().nullable(),
+  afterId: z.string().nullable(),
 });
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -28,6 +30,8 @@ export const TaskCreateSchema = z.object({
   maxAttempts: z.number().int().positive().optional(),
   targetDepartment: z.string().optional(),
   targetRole: z.string().optional(),
+  targetSkill: z.string().optional(),
+  afterId: z.string().optional(),
 });
 export type TaskCreate = z.infer<typeof TaskCreateSchema>;
 

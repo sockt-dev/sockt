@@ -177,6 +177,63 @@ describe("SqliteTaskStore", () => {
       expect(pending).toHaveLength(2);
       expect(pending.every((t) => t.tenantId === "t1")).toBe(true);
     });
+
+    test("a task with afterId does not appear until its dependency completes", async () => {
+      const dep = await store.create({ tenantId: "t1", description: "Generate leads" });
+      await store.create({ tenantId: "t1", description: "Write outreach copy", afterId: dep.id });
+
+      let pending = await store.listPending("t1");
+      expect(pending.map((t) => t.description)).toEqual(["Generate leads"]);
+
+      await store.claim(dep.id, "agent-1");
+      await store.update(dep.id, { status: "completed", output: "done" });
+
+      // dep itself is no longer 'pending' (it's 'completed') — only the
+      // formerly-hidden dependent should now show up.
+      pending = await store.listPending("t1");
+      expect(pending.map((t) => t.description)).toEqual(["Write outreach copy"]);
+    });
+
+    test("a task with afterId stays hidden if its dependency escalates instead of completing", async () => {
+      const dep = await store.create({ tenantId: "t1", description: "Generate leads" });
+      await store.create({ tenantId: "t1", description: "Write outreach copy", afterId: dep.id });
+
+      await store.claim(dep.id, "agent-1");
+      await store.update(dep.id, { status: "escalated", output: "no leads found" });
+
+      const pending = await store.listPending("t1");
+      expect(pending.map((t) => t.description)).toEqual([]);
+    });
+  });
+
+  describe("listPendingWithDeadDependency", () => {
+    test("finds pending tasks whose dependency escalated or was cancelled", async () => {
+      const dep1 = await store.create({ tenantId: "t1", description: "Dep 1" });
+      const dep2 = await store.create({ tenantId: "t1", description: "Dep 2" });
+      const stuck1 = await store.create({ tenantId: "t1", description: "Stuck on dep1", afterId: dep1.id });
+      const stuck2 = await store.create({ tenantId: "t1", description: "Stuck on dep2", afterId: dep2.id });
+      await store.create({ tenantId: "t1", description: "No dependency" });
+
+      await store.update(dep1.id, { status: "escalated" });
+      await store.update(dep2.id, { status: "cancelled" });
+
+      const dead = await store.listPendingWithDeadDependency();
+      const deadIds = dead.map((t) => t.id).sort();
+      expect(deadIds).toEqual([stuck1.id, stuck2.id].sort());
+    });
+
+    test("does not flag a task whose dependency is still pending or completed", async () => {
+      const stillPending = await store.create({ tenantId: "t1", description: "Dep still pending" });
+      await store.create({ tenantId: "t1", description: "Waiting on it", afterId: stillPending.id });
+
+      const completed = await store.create({ tenantId: "t1", description: "Dep completed" });
+      await store.update(completed.id, { status: "completed" });
+      // completed dependency means the dependent is just pending normally, not "dead"
+      await store.create({ tenantId: "t1", description: "Ready to go", afterId: completed.id });
+
+      const dead = await store.listPendingWithDeadDependency();
+      expect(dead).toEqual([]);
+    });
   });
 
   describe("listByParent", () => {
@@ -294,7 +351,26 @@ describe("SqliteTaskStore", () => {
       };
       expect(result.journal_mode).toBe("wal");
       db.close();
-      require("fs").unlinkSync(path);
+
+      // Windows doesn't release a WAL-mode sqlite file's lock the instant
+      // close() returns the way POSIX does — unlinkSync can throw EBUSY on
+      // a file that was *just* closed. Cleanup, not the test's assertion
+      // (already passed above), so best-effort: retry briefly, then give up
+      // silently rather than fail the test over a temp-file leak.
+      const fs = require("fs");
+      for (const suffix of ["", "-wal", "-shm"]) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            fs.unlinkSync(path + suffix);
+            break;
+          } catch (err: any) {
+            if (err?.code === "ENOENT") break; // nothing to clean up
+            if (attempt === 4) break; // give up quietly, don't fail the test on cleanup
+            const waitUntil = Date.now() + 20;
+            while (Date.now() < waitUntil) { /* brief synchronous backoff */ }
+          }
+        }
+      }
     });
   });
 });

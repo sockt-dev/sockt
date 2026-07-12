@@ -260,6 +260,47 @@ describe("OrchestratorApi", () => {
       }));
       expect(res.status).toBe(201);
     });
+
+    test("targetDepartment/targetRole/targetSkill/afterId are persisted, not dropped", async () => {
+      const dep = await createPendingTask();
+      const res = await request("/tasks", json({
+        tenantId: "t1",
+        description: "Write outreach copy",
+        parentId: dep.id,
+        role: "worker",
+        targetDepartment: "growth",
+        targetRole: "worker",
+        targetSkill: "outreach-copy",
+        afterId: dep.id,
+      }));
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.targetDepartment).toBe("growth");
+      expect(body.targetRole).toBe("worker");
+      expect(body.targetSkill).toBe("outreach-copy");
+      expect(body.afterId).toBe(dep.id);
+    });
+
+    test("a task ordered after a pending dependency is excluded from /tasks/pending until it completes", async () => {
+      const dep = await createPendingTask("t1", "Generate leads");
+      await request("/tasks", json({
+        tenantId: "t1",
+        description: "Write outreach copy",
+        role: "architect",
+        afterId: dep.id,
+      }));
+
+      let pendingRes = await request("/tasks/pending?tenantId=t1");
+      let pending = await pendingRes.json();
+      expect(pending.map((t: { description: string }) => t.description)).toEqual(["Generate leads"]);
+
+      await request("/tasks/claim", json({ taskId: dep.id, agentId: "agent-1" }));
+      await request(`/tasks/${dep.id}/complete`, json({ output: "10 leads", agentId: "agent-1" }));
+
+      pendingRes = await request("/tasks/pending?tenantId=t1");
+      pending = await pendingRes.json();
+      expect(pending.map((t: { description: string }) => t.description)).toEqual(["Write outreach copy"]);
+    });
   });
 
   // ── Approvals ───────────────────────────────────────────────

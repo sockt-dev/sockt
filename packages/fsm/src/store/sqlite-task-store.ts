@@ -20,6 +20,8 @@ interface TaskRow {
   updated_at: string;
   target_department: string | null;
   target_role: string | null;
+  target_skill: string | null;
+  after_id: string | null;
 }
 
 const PATCH_COLUMN_MAP: Record<keyof TaskPatch, string> = {
@@ -48,6 +50,8 @@ function mapRow(row: TaskRow): Task {
     updatedAt: row.updated_at,
     targetDepartment: row.target_department,
     targetRole: row.target_role,
+    targetSkill: row.target_skill,
+    afterId: row.after_id,
   };
 }
 
@@ -57,6 +61,7 @@ export class SqliteTaskStore implements TaskStore {
   private readonly getStmt: Statement;
   private readonly deleteStmt: Statement;
   private readonly listPendingStmt: Statement;
+  private readonly listPendingWithDeadDependencyStmt: Statement;
   private readonly listByParentStmt: Statement;
   private readonly listByOwnerStmt: Statement;
   private readonly countByStatusStmt: Statement;
@@ -70,17 +75,35 @@ export class SqliteTaskStore implements TaskStore {
     db.exec("PRAGMA journal_mode=WAL");
 
     this.insertStmt = db.prepare(`
-      INSERT INTO tasks (id, tenant_id, status, owner, parent_id, description, output, llm_calls_used, llm_calls_budget, attempt_count, max_attempts, created_at, updated_at, target_department, target_role)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+      INSERT INTO tasks (id, tenant_id, status, owner, parent_id, description, output, llm_calls_used, llm_calls_budget, attempt_count, max_attempts, created_at, updated_at, target_department, target_role, target_skill, after_id)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
     `);
 
     this.getStmt = db.prepare("SELECT * FROM tasks WHERE id = ?1");
 
     this.deleteStmt = db.prepare("DELETE FROM tasks WHERE id = ?1");
 
-    this.listPendingStmt = db.prepare(
-      "SELECT * FROM tasks WHERE tenant_id = ?1 AND status = 'pending'"
-    );
+    // Dependency ordering is enforced here, not as separate runtime logic —
+    // a task with after_id set simply doesn't appear in the pending feed
+    // until the task it depends on has reached 'completed'. If the
+    // dependency instead escalates/is cancelled, this task waits forever
+    // here; listPendingWithDeadDependency (below) is how the orch API's
+    // periodic sweep finds and cancels those rather than leaving them stuck.
+    this.listPendingStmt = db.prepare(`
+      SELECT * FROM tasks t
+      WHERE t.tenant_id = ?1 AND t.status = 'pending'
+        AND (t.after_id IS NULL OR EXISTS (
+              SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.status = 'completed'))
+    `);
+
+    // Unscoped across tenants, like ApprovalStore.sweepTimeouts() — this
+    // backs a periodic background sweep, not a per-request tenant-scoped
+    // read, so there's no tenant to filter by until a row is found.
+    this.listPendingWithDeadDependencyStmt = db.prepare(`
+      SELECT * FROM tasks t
+      WHERE t.status = 'pending' AND t.after_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.status IN ('escalated', 'cancelled'))
+    `);
 
     this.listByParentStmt = db.prepare(
       "SELECT * FROM tasks WHERE parent_id = ?1"
@@ -135,7 +158,9 @@ export class SqliteTaskStore implements TaskStore {
       timestamp,
       timestamp,
       task.targetDepartment ?? null,
-      task.targetRole ?? null
+      task.targetRole ?? null,
+      task.targetSkill ?? null,
+      task.afterId ?? null
     );
 
     return {
@@ -154,6 +179,8 @@ export class SqliteTaskStore implements TaskStore {
       updatedAt: timestamp,
       targetDepartment: task.targetDepartment ?? null,
       targetRole: task.targetRole ?? null,
+      targetSkill: task.targetSkill ?? null,
+      afterId: task.afterId ?? null,
     };
   }
 
@@ -208,6 +235,16 @@ export class SqliteTaskStore implements TaskStore {
 
   async listPending(tenantId: string): Promise<Task[]> {
     const rows = this.listPendingStmt.all(tenantId) as TaskRow[];
+    return rows.map(mapRow);
+  }
+
+  /** Pending tasks whose after_id dependency has escalated or been cancelled
+   * — they can never become claimable, since listPending's EXISTS check only
+   * ever matches a 'completed' dependency. Unscoped across tenants (see
+   * ApprovalStore.sweepTimeouts()) — used by the orch API's periodic sweep
+   * to cancel these instead of leaving them stuck pending forever. */
+  async listPendingWithDeadDependency(): Promise<Task[]> {
+    const rows = this.listPendingWithDeadDependencyStmt.all() as TaskRow[];
     return rows.map(mapRow);
   }
 

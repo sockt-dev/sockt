@@ -342,6 +342,77 @@ sequenceDiagram
   conversation field) so the next Plan phase reads it as part of the task
   context.
 
+## Task Graph: Targeting, Ordering, and Joins
+
+`create_task` (`packages/runtime/src/tools/built-in/create_task.ts`) is how an
+architect delegates work — it's also where the first eval pass's biggest
+production defect lived: a subtask created without explicit targeting was
+claimable by *any* worker in *any* department, so it could run under the
+wrong system prompt entirely. Three mechanisms close that and two related
+gaps, all added 2026-07-12:
+
+- **Department/role targeting** — `create_task` accepts an optional
+  `department` param; if omitted, it now defaults to the *caller's own*
+  `department` (previously it defaulted to nothing, i.e. any department could
+  claim it). An explicit override is validated against
+  `VALID_DEPARTMENTS = {"growth", "product", "engops", "general"}` and thrown
+  on anything else, rather than silently creating an untagged task. The
+  matching claim-side fix is in `packages/runtime/src/serve.ts`'s `claimable`
+  filter, which now checks `task.targetDepartment` against the worker's own
+  `department` (previously it only checked `targetRole`).
+- **Skill targeting** — an optional `skill` param is stored as
+  `Task.targetSkill` and surfaced to the worker via
+  `packages/runtime/src/runner/context.ts`'s `buildSystemPrompt()`, which
+  appends `Required skill: <skill> — follow that skill's workflow exactly.`
+  when set.
+- **Ordering (`after`)** — an optional `after` param (validated against the
+  `taskId`s the *current* execution actually created, tracked in a
+  caller-owned `createdIdsByParent: Map<string, Set<string>>` passed through
+  `serve.ts` — an `after` pointing at any other id, including a real task id
+  from a different parent, throws) is stored as `Task.afterId`. This is a
+  pure query-filter mechanism, not a new FSM state:
+  `SqliteTaskStore.listPending()` (`packages/fsm/src/store/sqlite-task-store.ts`)
+  excludes a task whose `afterId` dependency hasn't reached `completed` yet.
+  If the dependency instead lands on `escalated` or `cancelled`, the
+  dependent can never become claimable — a periodic sweep in
+  `OrchestratorApi`'s `sweepInterval` (`packages/orch/src/api/server.ts`)
+  calls `listPendingWithDeadDependency()` and auto-cancels those orphaned
+  tasks with an explanatory `output`, rather than leaving them pending
+  forever.
+- **Parent-child join** — before this, a decomposing architect task could
+  itself reach a terminal state (complete/escalate) while its
+  `create_task`-spawned children were still running, with no aggregation of
+  their results at all. Now, `AgentRunner.maybeBlockOnChildren`
+  (`packages/runtime/src/runner/agent-runner.ts`) checks whether the current
+  execution called `create_task` at least once; if so, the task's outcome is
+  overridden to `blocked` with `dependency: "awaiting-children:<id1>,<id2>,..."`
+  instead of completing. `maybeResumeParent`
+  (`packages/orch/src/join/parent-join.ts`) is called after every
+  child-terminal transition (`/complete`, `/escalate`, `/cancel`, and the
+  budget-exhaustion branches of `/record-llm-call` and `/llm-call`, all in
+  `packages/orch/src/api/routes/tasks.ts`); once *all* siblings under a
+  `blocked`-on-`awaiting-children:` parent are terminal, it appends each
+  child's status and output to the parent's `description`, prefixed with a
+  `[join] All subtasks finished.` marker and a `Synthesize ONE final answer`
+  instruction, then transitions the parent `blocked → pending` with `owner`
+  cleared so it re-enters the claim queue. `AgentRunner` checks for that
+  marker on task pickup so a resumed join completes normally instead of
+  re-blocking on its own already-finished children.
+  `packages/slack-gateway/src/reply-telemetry.ts` special-cases the
+  `awaiting-children:` dependency string to post a friendlier
+  "⏳ Delegated to N subtask(s)…" message instead of the generic blocked-task
+  wording.
+  > Note: `AWAITING_CHILDREN_PREFIX`/`JOIN_MARKER` are intentionally
+  > duplicated as literal string constants in both `agent-runner.ts` (runtime)
+  > and `parent-join.ts` (orch) rather than imported — `runtime` has no
+  > package dependency on `orch` (they only talk over HTTP), the same reason
+  > HITL status strings already cross that boundary as literals.
+
+All three architect prompts in
+`packages/runtime/src/prompts/department-prompts.ts` were updated with
+department-specific examples of when to pass `skill:`/`after:` on
+`create_task` calls.
+
 ## Departments & Multi-Agent Coordination
 
 A **department** (`growth`, `product`, `engops`) is a template:

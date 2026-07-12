@@ -64,6 +64,7 @@ if (maxConcurrent > 1) {
 }
 const currentTaskId: { value?: string } = {};
 const createdByParent = new Map<string, Set<string>>();
+const createdIdsByParent = new Map<string, Set<string>>();
 
 // Whether exec_code refuses to run rather than silently falling back to an
 // unsandboxed temp dir when sbx is unavailable. Defaults to true for engops
@@ -79,7 +80,7 @@ const requireSandbox = process.env.EXEC_CODE_REQUIRE_SANDBOX !== undefined
   : requireSandboxDefault;
 
 const toolRegistry = new ToolRegistry();
-registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, currentTaskId, createdByParent, requireSandbox, apiToken: orchApiToken });
+registerBuiltInTools(toolRegistry, { orchUrl, tenantId: deploymentId, agentId: agentConfig.id, department, currentTaskId, createdByParent, createdIdsByParent, requireSandbox, apiToken: orchApiToken });
 
 // Comma-separated tool names that require human approval before running,
 // e.g. "exec_code,http_request". APPROVAL_REQUIRED_TOOLS always wins when
@@ -154,12 +155,18 @@ while (true) {
   try {
     if (activeTasks < maxConcurrent) {
       const pending = await orchClient.listPending(deploymentId);
+      // Department and role are enforced independently, not only when BOTH
+      // are set — that was the actual bug behind cross-department claiming
+      // (a growth subtask with targetDepartment set but no targetRole used
+      // to fall through to "any worker", including engops/product workers
+      // running the wrong system prompt entirely). create_task now always
+      // sets targetDepartment (defaulting to the caller's own), so this
+      // path is the common case for every subtask going forward.
       const claimable = pending.filter((t) => {
-        if (t.targetDepartment && t.targetRole) {
-          return t.targetDepartment === department && t.targetRole === agentRole;
-        }
-        // Untagged tasks (e.g. architect-created subtasks) go to workers only,
-        // so architects never grab their own subtasks meant for a worker skill.
+        if (t.targetDepartment && t.targetDepartment !== department) return false;
+        if (t.targetRole) return t.targetRole === agentRole;
+        // Untagged role (e.g. a legacy/top-level task with no targetRole) goes
+        // to workers only, so architects never grab a worker-shaped subtask.
         return agentRole === "worker";
       });
       for (const task of claimable) {
@@ -193,6 +200,7 @@ while (true) {
             }
           } finally {
             createdByParent.delete(task.id);
+            createdIdsByParent.delete(task.id);
             activeTasks--;
           }
         })();

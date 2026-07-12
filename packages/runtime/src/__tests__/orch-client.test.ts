@@ -38,6 +38,9 @@ describe("HttpOrchClient", () => {
         if (url.pathname.endsWith("/record-llm-call")) {
           return Response.json({ allowed: true, remaining: 99 });
         }
+        if (url.pathname === "/tasks/pending" && req.method === "GET") {
+          return Response.json([]);
+        }
         if (url.pathname === "/tasks" && req.method === "GET") {
           return Response.json([]);
         }
@@ -104,12 +107,12 @@ describe("HttpOrchClient", () => {
     expect(result.remaining).toBe(99);
   });
 
-  test("listPending sends GET with query params", async () => {
+  test("listPending sends GET to the dependency-filtered /tasks/pending endpoint", async () => {
     const client = new HttpOrchClient({ baseUrl });
     const tasks = await client.listPending("tenant-1");
 
     expect(lastRequest!.method).toBe("GET");
-    expect(lastRequest!.path).toBe("/tasks?tenantId=tenant-1&status=pending");
+    expect(lastRequest!.path).toBe("/tasks/pending?tenantId=tenant-1");
     expect(tasks).toEqual([]);
   });
 

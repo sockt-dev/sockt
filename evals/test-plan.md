@@ -190,3 +190,53 @@ Also directly observed live during this replay (not new bugs — the same duplic
 **Important scope note:** neither of the above is the LLM judge the original triage nominated (see (c) in the "Fix-first triage" section above) — both are regex-based code checks, the narrow, objectively-detectable half of "capability hallucination." A real judge, validated against the 20 labeled traces before being trusted (per the Phase 3 pitch), is still not built. `SKILL_COMPILE_ENABLED` is closer to safe to flip on than before, but "gated on a validated judge" isn't true yet — it's gated on a pattern check that will miss subtler hallucinations.
 
 **Not yet done from the Phase 3 pitch:** the actual LLM hallucination judge (3.1's harder half), a full 20-row eval re-run on one fixed provider (3.2), and cross-department task routing (3.4).
+
+## Status update — 2026-07-12 (later still): production-hardening Phase 1 (task graph) shipped
+
+Follow-on from a Fable planning-agent breakdown of what's wrong in each
+department's production behavior; this closes item 3.4 above
+("cross-department task routing") plus two related gaps Fable's analysis
+found in the same trace evidence — dependency ordering with no mechanism to
+express it, and no result aggregation when an architect decomposed a goal
+into subtasks via `create_task`.
+
+**Shipped:**
+
+- **Cross-department claiming, fixed.** `create_task` now defaults
+  `targetDepartment` to the caller's own department instead of leaving it
+  unset; the worker-side claim filter in `serve.ts` now actually checks it.
+  This was the exact defect behind subtasks silently running under the wrong
+  department's system prompt.
+- **Dependency ordering (`after`).** A subtask can now name another task
+  (that the same execution created) it must wait on — `listPending` excludes
+  it until the dependency reaches `completed`; a periodic sweep auto-cancels
+  it if the dependency instead dies (`escalated`/`cancelled`) so it doesn't
+  wait forever.
+- **Skill targeting (`skill`).** A subtask can request a specific skill's
+  workflow be followed, injected into the worker's system prompt.
+- **Parent-child join.** An architect task that delegates via `create_task`
+  now blocks until *all* its children finish, then resumes with their
+  combined results appended and an instruction to synthesize one final
+  answer — previously it could complete or escalate while children were
+  still running, with zero aggregation. This was the exact defect the
+  `G1-RERUN.md` trace (cited in Fable's analysis) demonstrated: an early
+  reply while subtasks were still mid-flight.
+- Full detail, file paths, and the exact route/query mechanics:
+  [ARCHITECTURE.md#task-graph-targeting-ordering-and-joins](../docs/ARCHITECTURE.md#task-graph-targeting-ordering-and-joins).
+
+**Verification:** covered by new automated tests only (`fsm`'s
+`listPending`/`listPendingWithDeadDependency` describe blocks, `runtime`'s
+`create_task.test.ts` targeting/ordering describes and `runner.test.ts`'s two
+join tests, `orch`'s new `parent-join.test.ts` and the `POST /tasks`
+field-passthrough + dependency-filtered-`/tasks/pending` tests in
+`api.test.ts`) — **not yet live-verified against a real Slack workspace** the
+way M2/Phase 3.3 above were. Treat as implemented-and-unit-tested, not yet
+field-confirmed.
+
+**Not yet done from the same Fable spec (explicitly deferred to a following
+session):** the output verification gate framework (deterministic/regex/
+structural checks distinct from an LLM judge), department-specific
+evaluators (lead provenance, computed-number, metric-sourcing,
+grounded-quotes, evidence-citation), a `github_create_issue` tool +
+product-approval default, and HITL ergonomics (reminder pings,
+re-request-after-timeout, read-only tool allowlist bypass).
