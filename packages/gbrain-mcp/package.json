@@ -1,6 +1,7 @@
 {
   "name": "@sockt/gbrain-mcp",
   "version": "0.0.1",
+  "private": true,
   "type": "module",
   "dependencies": {
     "@sockt/types": "workspace:*"

@@ -78,30 +78,9 @@ jobs:
         if: steps.skip.outputs.skipped != 'true'
         run: |
           VER="${{ steps.meta.outputs.version }}"
-          PACKAGES=(types fsm memory runtime orch cadvp)
+          PACKAGES=(types fsm memory slack-gateway runtime orch cadvp)
           for p in "${PACKAGES[@]}"; do
-            pkg="packages/$p/package.json"
-            # bump own version
             npm version "$VER" --no-git-tag-version --prefix "packages/$p"
-            # rewrite workspace: protocol deps to released version
-            node -e '
-              const fs = require("fs");
-              const path = process.argv[1];
-              const ver = process.argv[2];
-              const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-              const rewrite = (dep) => dep ? Object.fromEntries(
-                Object.entries(dep).map(([k, v]) => {
-                  if (k.startsWith("@sockt/") && typeof v === "string" && v.startsWith("workspace:")) {
-                    return [k, `^${ver}`];
-                  }
-                  return [k, v];
-                })
-              ) : dep;
-              pkg.dependencies = rewrite(pkg.dependencies);
-              pkg.peerDependencies = rewrite(pkg.peerDependencies);
-              pkg.devDependencies = rewrite(pkg.devDependencies);
-              fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-            ' "$pkg" "$VER"
           done
 
       - name: Bump Rust sockt-cli version
@@ -213,38 +192,49 @@ jobs:
         run: |
           VER="${{ needs.verify.outputs.version }}"
           echo "Releasing version: $VER"
-          PACKAGES=(types fsm memory runtime orch cadvp)
-          CURRENT=$(node -e 'console.log(require("./packages/types/package.json").version)')
-          if [ "$CURRENT" = "$VER" ]; then
-            echo "Versions already at $VER (bump job already committed) — skipping."
-          else
-            for p in "${PACKAGES[@]}"; do
-              pkg="packages/$p/package.json"
-              npm version "$VER" --no-git-tag-version --prefix "packages/$p"
-              node -e '
-                const fs = require("fs");
-                const path = process.argv[1];
-                const ver = process.argv[2];
-                const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-                const rewrite = (dep) => dep ? Object.fromEntries(
-                  Object.entries(dep).map(([k, v]) => {
-                    if (k.startsWith("@sockt/") && typeof v === "string" && v.startsWith("workspace:")) {
-                      return [k, `^${ver}`];
-                    }
-                    return [k, v];
-                  })
-                ) : dep;
-                pkg.dependencies = rewrite(pkg.dependencies);
-                pkg.peerDependencies = rewrite(pkg.peerDependencies);
-                pkg.devDependencies = rewrite(pkg.devDependencies);
-                fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-              ' "$pkg" "$VER"
-            done
+          PACKAGES=(types fsm memory slack-gateway runtime orch cadvp)
+          for p in "${PACKAGES[@]}"; do
+            pkg="packages/$p/package.json"
+            npm version "$VER" --no-git-tag-version --prefix "packages/$p"
+            node -e '
+              const fs = require("fs");
+              const path = process.argv[1];
+              const ver = process.argv[2];
+              const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+              const rewrite = (dep) => dep ? Object.fromEntries(
+                Object.entries(dep).map(([k, v]) => {
+                  if (k.startsWith("@sockt/") && typeof v === "string" && v.startsWith("workspace:")) {
+                    return [k, `^${ver}`];
+                  }
+                  return [k, v];
+                })
+              ) : dep;
+              pkg.dependencies = rewrite(pkg.dependencies);
+              pkg.peerDependencies = rewrite(pkg.peerDependencies);
+              pkg.devDependencies = rewrite(pkg.devDependencies);
+              fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+            ' "$pkg" "$VER"
+          done
+
+      - name: "Guard: fail if any workspace: reference remains"
+        run: |
+          PACKAGES=(types fsm memory slack-gateway runtime orch cadvp)
+          found=0
+          for p in "${PACKAGES[@]}"; do
+            if grep -q 'workspace:' "packages/$p/package.json"; then
+              echo "::error::packages/$p/package.json still contains a workspace: reference after rewrite."
+              grep -n 'workspace:' "packages/$p/package.json" || true
+              found=1
+            fi
+          done
+          if [ "$found" = "1" ]; then
+            exit 1
           fi
+          echo "No workspace: references remain in published package.json files."
 
       - name: Publish packages to npm
         run: |
-          PACKAGES=(types fsm memory runtime orch cadvp)
+          PACKAGES=(types fsm memory slack-gateway runtime orch cadvp)
           VER="${{ needs.verify.outputs.version }}"
           for p in "${PACKAGES[@]}"; do
             echo "::group::Publish @sockt/$p"
