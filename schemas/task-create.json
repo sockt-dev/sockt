@@ -26,6 +26,12 @@
     },
     "targetRole": {
       "type": "string"
+    },
+    "targetSkill": {
+      "type": "string"
+    },
+    "afterId": {
+      "type": "string"
     }
   },
   "required": [

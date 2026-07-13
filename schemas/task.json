@@ -101,6 +101,26 @@
           "type": "null"
         }
       ]
+    },
+    "targetSkill": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "afterId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -118,7 +138,9 @@
     "createdAt",
     "updatedAt",
     "targetDepartment",
-    "targetRole"
+    "targetRole",
+    "targetSkill",
+    "afterId"
   ],
   "additionalProperties": false
 }
