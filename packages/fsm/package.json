@@ -29,6 +29,6 @@
   },
   "dependencies": {
     "@sockt/types": "workspace:*",
-    "uuid": "latest"
+    "uuid": "^14.0.1"
   }
 }

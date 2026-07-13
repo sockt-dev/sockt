@@ -5,6 +5,17 @@ import { createGroq } from "@ai-sdk/groq";
 import type { LlmConfig } from "@sockt/types";
 import { LlmError } from "@sockt/types";
 
+// As of @ai-sdk/openai v4 (AI SDK v7), createOpenAI(...)'s default call
+// signature (`provider(modelId)`) uses OpenAI's proprietary Responses API
+// (`/responses`), not Chat Completions (`/chat/completions`). Every
+// "OpenAI-compatible" target this file talks to — OpenRouter, Ollama, and
+// arbitrary custom baseUrls — only implements Chat Completions, so every
+// createOpenAI() usage here must explicitly use `.chat(modelId)` instead of
+// calling the provider directly.
+function openAiCompatible(options: Parameters<typeof createOpenAI>[0]) {
+  return createOpenAI(options).chat;
+}
+
 export function getProvider(config: LlmConfig) {
   switch (config.provider) {
     case "anthropic":
@@ -12,7 +23,7 @@ export function getProvider(config: LlmConfig) {
     case "openai":
       // Auto-detect OpenRouter from baseUrl
       if (config.baseUrl?.includes("openrouter.ai")) {
-        return createOpenAI({
+        return openAiCompatible({
           apiKey: config.apiKey,
           baseURL: config.baseUrl,
           headers: {
@@ -21,9 +32,9 @@ export function getProvider(config: LlmConfig) {
           },
         });
       }
-      return createOpenAI({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return openAiCompatible({ apiKey: config.apiKey, baseURL: config.baseUrl });
     case "openrouter":
-      return createOpenAI({
+      return openAiCompatible({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ?? "https://openrouter.ai/api/v1",
         headers: {
@@ -34,7 +45,7 @@ export function getProvider(config: LlmConfig) {
     case "groq":
       return createGroq({ apiKey: config.apiKey });
     case "ollama":
-      return createOpenAI({
+      return openAiCompatible({
         baseURL: config.baseUrl ?? "http://localhost:11434/v1",
         apiKey: "ollama",
       });
@@ -49,7 +60,7 @@ export function getProvider(config: LlmConfig) {
       // Handle unknown providers (like "custom" from Rust CLI) as OpenAI-compatible
       // Auto-detect OpenRouter
       if (config.baseUrl?.includes("openrouter.ai")) {
-        return createOpenAI({
+        return openAiCompatible({
           apiKey: config.apiKey,
           baseURL: config.baseUrl,
           headers: {
@@ -60,7 +71,7 @@ export function getProvider(config: LlmConfig) {
       }
       // Default to OpenAI-compatible for custom endpoints
       if (config.baseUrl) {
-        return createOpenAI({
+        return openAiCompatible({
           apiKey: config.apiKey || "none",
           baseURL: config.baseUrl
         });

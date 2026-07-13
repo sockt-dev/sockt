@@ -1,5 +1,5 @@
-import { generateText, streamText, jsonSchema } from "ai";
-import type { CoreMessage, CoreTool, ToolCallPart, TextPart, ToolResultPart } from "ai";
+import { generateText, streamText, jsonSchema, Output } from "ai";
+import type { ModelMessage, Tool, ToolCallPart, TextPart, ToolResultPart } from "ai";
 import type {
   LlmClient,
   LlmConfig,
@@ -40,26 +40,40 @@ export class HttpLlmClient implements LlmClient {
       model: provider(config.model),
       messages: this.convertMessages(request.messages),
       tools: request.tools ? this.convertTools(request.tools) : undefined,
-      maxTokens: config.maxTokens,
+      // AI SDK v7: system-role entries inside `messages` (rather than a
+      // separate `system`/`instructions` param) are rejected unless this is
+      // set — we always build a system message as messages[0].
+      allowSystemInMessages: true,
+      maxOutputTokens: config.maxTokens,
       temperature: config.temperature,
     };
 
     if (config.features) {
       if (config.features.thinking?.enabled) {
-        options.experimental_thinking = {
-          type: "enabled",
-          budgetTokens: config.features.thinking.budgetTokens,
-          display: config.features.thinking.display,
+        // experimental_thinking was removed in AI SDK v5+; extended thinking
+        // is now a provider-specific option rather than a top-level flag.
+        options.providerOptions = {
+          ...options.providerOptions,
+          anthropic: {
+            ...options.providerOptions?.anthropic,
+            thinking: {
+              type: "enabled",
+              budgetTokens: config.features.thinking.budgetTokens,
+            },
+          },
         };
       }
 
       if (config.features.structuredOutput?.enabled && config.features.structuredOutput.schema) {
-        options.output = jsonSchema(config.features.structuredOutput.schema as any);
+        // v6+: `output` takes an Output<...> spec, not a raw JSON schema.
+        options.output = Output.object({ schema: jsonSchema(config.features.structuredOutput.schema as any) });
       }
 
       if (config.features.promptCaching?.enabled) {
-        options.experimental_providerMetadata = {
+        options.providerOptions = {
+          ...options.providerOptions,
           anthropic: {
+            ...options.providerOptions?.anthropic,
             cacheControl: { type: "ephemeral" },
           },
         };
@@ -107,7 +121,8 @@ export class HttpLlmClient implements LlmClient {
       model: provider(config.model),
       messages: this.convertMessages(request.messages),
       tools: request.tools ? this.convertTools(request.tools) : undefined,
-      maxTokens: config.maxTokens,
+      allowSystemInMessages: true,
+      maxOutputTokens: config.maxTokens,
       temperature: config.temperature,
     });
 
@@ -120,8 +135,8 @@ export class HttpLlmClient implements LlmClient {
     return estimateMessagesTokens(messages);
   }
 
-  private convertMessages(messages: LlmMessage[]): CoreMessage[] {
-    return messages.map((m): CoreMessage => {
+  private convertMessages(messages: LlmMessage[]): ModelMessage[] {
+    return messages.map((m): ModelMessage => {
       if (m.role === "assistant" && m.toolCalls?.length) {
         const parts: (TextPart | ToolCallPart)[] = [];
         const contentStr = typeof m.content === "string" ? m.content : "";
@@ -133,7 +148,7 @@ export class HttpLlmClient implements LlmClient {
             type: "tool-call",
             toolCallId: tc.id,
             toolName: tc.name,
-            args: tc.arguments,
+            input: tc.arguments,
           });
         }
         return { role: "assistant", content: parts };
@@ -146,7 +161,7 @@ export class HttpLlmClient implements LlmClient {
             type: "tool-result",
             toolCallId: m.toolCallId!,
             toolName: "",
-            result: contentStr,
+            output: { type: "text", value: contentStr },
           },
         ];
         return { role: "tool", content: parts };
@@ -158,28 +173,30 @@ export class HttpLlmClient implements LlmClient {
             case "text":
               return { type: "text" as const, text: content.text ?? "" };
             case "image":
+              // "image" content parts are deprecated in favor of "file" with
+              // mediaType: "image" (or a specific image/* subtype).
               return {
-                type: "image" as const,
-                image: content.imageUrl || content.imageBase64 || "",
-                mimeType: content.mimeType,
+                type: "file" as const,
+                data: content.imageUrl || content.imageBase64 || "",
+                mediaType: content.mimeType || "image",
               };
             case "audio":
               return {
                 type: "file" as const,
                 data: content.audioUrl || content.audioBase64 || "",
-                mimeType: content.mimeType || "audio/wav",
+                mediaType: content.mimeType || "audio/wav",
               };
             case "document":
               return {
                 type: "file" as const,
                 data: content.documentUrl || content.documentBase64 || "",
-                mimeType: content.mimeType || "application/pdf",
+                mediaType: content.mimeType || "application/pdf",
               };
             case "video":
               return {
                 type: "file" as const,
                 data: content.imageUrl || content.imageBase64 || "",
-                mimeType: content.mimeType || "video/mp4",
+                mediaType: content.mimeType || "video/mp4",
               };
             default:
               throw new LlmError(`Unsupported content type: ${(content as any).type}`, {});
@@ -192,12 +209,12 @@ export class HttpLlmClient implements LlmClient {
     });
   }
 
-  private convertTools(tools: ToolDefinition[]): Record<string, CoreTool> {
-    const result: Record<string, CoreTool> = {};
+  private convertTools(tools: ToolDefinition[]): Record<string, Tool> {
+    const result: Record<string, Tool> = {};
     for (const t of tools) {
       result[t.name] = {
         description: t.description,
-        parameters: jsonSchema(t.parameters as any),
+        inputSchema: jsonSchema(t.parameters as any),
       };
     }
     return result;
@@ -207,7 +224,7 @@ export class HttpLlmClient implements LlmClient {
     const toolCalls = result.toolCalls?.map((tc: any) => ({
       id: tc.toolCallId,
       name: tc.toolName,
-      arguments: tc.args,
+      arguments: tc.input,
     }));
 
     const finishReason = this.normalizeFinishReason(result.finishReason);
@@ -219,12 +236,12 @@ export class HttpLlmClient implements LlmClient {
         toolCalls: toolCalls?.length ? toolCalls : undefined,
       },
       usage: {
-        promptTokens: result.usage?.promptTokens ?? 0,
-        completionTokens: result.usage?.completionTokens ?? 0,
-        totalTokens: (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0),
-        cacheReadInputTokens: result.usage?.cacheReadInputTokens,
-        cacheWriteInputTokens: result.usage?.cacheWriteInputTokens,
-        reasoningTokens: result.experimental_thinking?.thinkingTokens,
+        promptTokens: result.usage?.inputTokens ?? 0,
+        completionTokens: result.usage?.outputTokens ?? 0,
+        totalTokens: result.usage?.totalTokens ?? ((result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0)),
+        cacheReadInputTokens: result.usage?.inputTokenDetails?.cacheReadTokens,
+        cacheWriteInputTokens: result.usage?.inputTokenDetails?.cacheWriteTokens,
+        reasoningTokens: result.usage?.outputTokenDetails?.reasoningTokens,
       },
       model,
       finishReason,

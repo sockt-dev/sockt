@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import type { ScheduledTask } from "node-cron";
 import type { Task, TaskCreate } from "@sockt/types";
 
 export interface ScheduleConfig {
@@ -12,7 +13,7 @@ export interface ScheduleConfig {
 
 export class Scheduler {
   private schedules = new Map<string, ScheduleConfig>();
-  private jobs = new Map<string, cron.ScheduledTask>();
+  private jobs = new Map<string, ScheduledTask>();
   private readonly dispatch: (agentId: string, task: TaskCreate) => Promise<Task>;
 
   constructor(dispatch: (agentId: string, task: TaskCreate) => Promise<Task>) {

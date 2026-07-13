@@ -32,7 +32,7 @@
     "@sockt/fsm": "workspace:*",
     "@sockt/slack-gateway": "workspace:*",
     "hono": "^4.6",
-    "node-cron": "^3.0"
+    "node-cron": "^4.6.0"
   },
   "devDependencies": {
     "@types/node-cron": "^3.0"
