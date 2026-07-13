@@ -392,11 +392,17 @@ gate semantics from [Tool approval gate](#1-tool-approval-gate) above:
   "exec_code"`, the language is bash/sh, and *every* line (split on `|`,
   `&&`, `;`) matches a read-only command pattern (`git log`, `kubectl get`,
   `grep`, `curl -I`, ...) with no `>`/`>>` redirect or mutation token
-  (`rm`/`mv`/`chmod`/`tee`/`sed -i`/...) anywhere. `AgentRunner`'s HITL check
-  in `runLoop` skips `checkHitlApproval` entirely when this returns true,
-  logging a `hitl_bypass_readonly` trace step for auditability instead —
-  routing every diagnostic `kubectl get pods` through a human approval queue
-  just trains people to rubber-stamp without reading. Fail-closed: any
+  (`rm`/`mv`/`chmod`/`tee`/`sed -i`/...) anywhere, no `$(...)`/backtick/`<(...)`
+  command or process substitution (which lets an arbitrary command run
+  "inside" what looks like an allowed one — `echo $(reboot)` would otherwise
+  match the `echo` pattern), and — `find` specifically — no `-delete`/
+  `-exec`/`-execdir`/`-ok`/`-okdir`/`-fprintf` action (find's own built-in
+  mutation mechanisms, which don't route through the mutation-token
+  blocklist above at all). `AgentRunner`'s HITL check in `runLoop` skips
+  `checkHitlApproval` entirely when this returns true, logging a
+  `hitl_bypass_readonly` trace step for auditability instead — routing every
+  diagnostic `kubectl get pods` through a human approval queue just trains
+  people to rubber-stamp without reading. Fail-closed: any
   unmatched line, non-shell language, or unknown tool returns false.
   `HITL_READONLY_BYPASS=false` disables the bypass entirely;
   `ENGOPS_READONLY_EXTRA` appends comma-separated extra regex patterns to
@@ -642,13 +648,20 @@ gaps, all added 2026-07-12:
   child-terminal transition (`/complete`, `/escalate`, `/cancel`, and the
   budget-exhaustion branches of `/record-llm-call` and `/llm-call`, all in
   `packages/orch/src/api/routes/tasks.ts`); once *all* siblings under a
-  `blocked`-on-`awaiting-children:` parent are terminal, it appends each
-  child's status and output to the parent's `description`, prefixed with a
+  `blocked`-on-`awaiting-children:` parent are terminal, it computes a new
+  description (each child's status and output appended, prefixed with a
   `[join] All subtasks finished.` marker and a `Synthesize ONE final answer`
-  instruction, then transitions the parent `blocked → pending` with `owner`
-  cleared so it re-enters the claim queue. `AgentRunner` checks for that
-  marker on task pickup so a resumed join completes normally instead of
-  re-blocking on its own already-finished children.
+  instruction) and resumes the parent via `SqliteTaskStore.resumeIfBlocked` —
+  a single atomic `UPDATE ... WHERE status = 'blocked'` that sets
+  `status='pending'`, `owner=NULL`, and the new description all in one
+  statement, rather than a separate read-transition-write sequence. This
+  matters when two children finish close together: both calls can read the
+  parent as still `blocked`, but only one's `resumeIfBlocked` actually
+  matches a row — the other affects zero rows instead of overwriting the
+  winner's already-joined description with a second synthesis block.
+  `AgentRunner` checks for the `JOIN_MARKER` on task pickup so a resumed join
+  completes normally instead of re-blocking on its own already-finished
+  children.
   `packages/slack-gateway/src/reply-telemetry.ts` special-cases the
   `awaiting-children:` dependency string to post a friendlier
   "⏳ Delegated to N subtask(s)…" message instead of the generic blocked-task

@@ -39,7 +39,7 @@ describe("maybeResumeParent", () => {
     await store.update(children[0]!.id, { status: "completed", output: "leads.csv" });
     // children[1] is still pending
 
-    await maybeResumeParent(store, fsm, telemetry, children[0]!.id);
+    await maybeResumeParent(store, telemetry, children[0]!.id);
 
     const stillBlocked = await store.get(parent.id);
     expect(stillBlocked?.status).toBe("blocked");
@@ -56,7 +56,7 @@ describe("maybeResumeParent", () => {
     await fsm.transition(children[1]!.id, "in_progress", "escalated", "growth-worker-2");
     await store.update(children[1]!.id, { output: "could not find any results" });
 
-    await maybeResumeParent(store, fsm, telemetry, children[1]!.id);
+    await maybeResumeParent(store, telemetry, children[1]!.id);
 
     const resumed = await store.get(parent.id);
     expect(resumed?.status).toBe("pending");
@@ -75,7 +75,7 @@ describe("maybeResumeParent", () => {
     await store.claim(children[0]!.id, "growth-worker-1");
     await store.update(children[0]!.id, { status: "completed", output: "done" });
 
-    await maybeResumeParent(store, fsm, telemetry, children[0]!.id);
+    await maybeResumeParent(store, telemetry, children[0]!.id);
 
     const reclaimed = await store.claim(parent.id, "growth-architect-1");
     expect(reclaimed.owner).toBe("growth-architect-1");
@@ -86,8 +86,36 @@ describe("maybeResumeParent", () => {
     await store.claim(orphan.id, "agent-1");
     await store.update(orphan.id, { status: "completed", output: "done" });
 
-    await maybeResumeParent(store, fsm, telemetry, orphan.id);
+    await maybeResumeParent(store, telemetry, orphan.id);
     expect(events).toHaveLength(0);
+  });
+
+  test("two concurrent resume attempts for the same parent don't double-append the join block", async () => {
+    // Regression test for a race: both calls read the parent while it's
+    // still 'blocked' (interleaved before either writes), then both attempt
+    // to resume. Only one should actually win — resumeIfBlocked's atomic
+    // UPDATE...WHERE status='blocked' means the second call's write affects
+    // zero rows instead of overwriting the first call's already-joined
+    // description with a second synthesis block.
+    const { parent, children } = await blockedParentWithChildren(2);
+    await store.claim(children[0]!.id, "growth-worker-1");
+    await store.update(children[0]!.id, { status: "completed", output: "10 qualified leads" });
+    await store.claim(children[1]!.id, "growth-worker-2");
+    await store.update(children[1]!.id, { status: "completed", output: "20 more leads" });
+
+    // Both calls run concurrently against the same already-all-terminal state.
+    await Promise.all([
+      maybeResumeParent(store, telemetry, children[0]!.id),
+      maybeResumeParent(store, telemetry, children[1]!.id),
+    ]);
+
+    const resumed = await store.get(parent.id);
+    expect(resumed?.status).toBe("pending");
+    expect(resumed?.owner).toBeNull();
+    // Exactly one JOIN_MARKER block, not two.
+    const occurrences = (resumed?.description.match(new RegExp(JOIN_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
+    expect(occurrences).toBe(1);
+    expect(events).toHaveLength(1);
   });
 
   test("does nothing when the parent is not blocked-on-children (e.g. a normal blocked HITL task)", async () => {
@@ -100,7 +128,7 @@ describe("maybeResumeParent", () => {
     await store.claim(child.id, "agent-2");
     await store.update(child.id, { status: "completed", output: "done" });
 
-    await maybeResumeParent(store, fsm, telemetry, child.id);
+    await maybeResumeParent(store, telemetry, child.id);
 
     const stillBlocked = await store.get(parent.id);
     expect(stillBlocked?.status).toBe("blocked");

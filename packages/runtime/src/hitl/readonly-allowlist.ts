@@ -1,7 +1,11 @@
 export const DEFAULT_READONLY_PATTERNS: RegExp[] = [
   /^(grep|egrep|rg|zgrep)\b/,
   /^(cat|head|tail|less|wc|cut|sort|uniq)\b/,
-  /^(ls|find|stat|file|du|df|pwd)\b/,
+  // `find` is deliberately NOT bare-allowed here — `find ... -delete` and
+  // `find ... -exec <anything> \;` are two of find's own built-in mutation
+  // mechanisms and don't route through any of the blocked binary names
+  // below. It gets its own stricter check in isReadOnlyLine instead.
+  /^(ls|stat|file|du|df|pwd)\b/,
   /^(ps|top -b|uptime|free|vmstat|iostat)\b/,
   /^journalctl\b(?!.*--vacuum)/,
   /^systemctl (status|show|list-units|is-active)\b/,
@@ -13,12 +17,27 @@ export const DEFAULT_READONLY_PATTERNS: RegExp[] = [
   /^(echo|printf|date|whoami|hostname|env$|uname)\b/,
 ];
 
+const FIND_PATTERN = /^find\b/;
+// find's own -delete/-exec/-execdir/-ok/-okdir/-fprintf actions can mutate
+// or run arbitrary commands — none of these route through the blocked
+// binary names below, so `find` needs this dedicated check rather than a
+// bare `^find\b` allow.
+const FIND_MUTATING_ACTION = /-delete\b|-exec(dir)?\b|-ok(dir)?\b|-fprintf\b/;
+
 // A single `|` pipe between two read-only commands is fine (each side is
 // validated separately below) — `>`/`>>` redirects, and a short blocklist of
 // mutating binaries, are never allowed regardless of what pattern a segment
 // otherwise matches, so a clever `grep foo > /etc/passwd` doesn't sneak past
 // pattern-matching alone.
 const MUTATION_TOKENS = /[>]|\brm\b|\bmv\b|\bcp\b|\bchmod\b|\bchown\b|\bkill\b|\btee\b|\bsed\s+-i\b/;
+
+// Command substitution and process substitution let an arbitrary command
+// run "inside" what looks like an allowed one — e.g. `echo $(reboot)`
+// matches the `echo` pattern and contains no MUTATION_TOKENS token, but
+// still executes `reboot`. None of the per-segment pattern matching below
+// can safely see through these, so any line containing them is rejected
+// outright regardless of what else it matches.
+const SUBSHELL_SUBSTITUTION = /\$\(|`|<\(|>\(/;
 
 function extraPatterns(): RegExp[] {
   const raw = process.env.ENGOPS_READONLY_EXTRA;
@@ -32,11 +51,15 @@ function extraPatterns(): RegExp[] {
 
 function isReadOnlyLine(line: string, patterns: RegExp[]): boolean {
   if (MUTATION_TOKENS.test(line)) return false;
+  if (SUBSHELL_SUBSTITUTION.test(line)) return false;
   // Split on `|` (pipe) and `&&`/`;` (sequencing) — every resulting segment
   // must itself be a read-only command.
   const segments = line.split(/\|\||&&|;|\|(?!\|)/).map((s) => s.trim()).filter(Boolean);
   if (segments.length === 0) return false;
-  return segments.every((segment) => patterns.some((p) => p.test(segment)));
+  return segments.every((segment) => {
+    if (FIND_PATTERN.test(segment)) return !FIND_MUTATING_ACTION.test(segment);
+    return patterns.some((p) => p.test(segment));
+  });
 }
 
 /**

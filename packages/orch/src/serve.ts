@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { homedir } from "node:os";
 import { initializeSchema, SqliteTaskStore } from "@sockt/fsm";
 import type { ChannelGateway, TelemetryEmitter } from "@sockt/types";
 import { Orchestrator } from "./orchestrator.ts";
@@ -7,7 +8,10 @@ import { TaskOriginStore } from "./store/task-origin-store.ts";
 
 const port = Number(process.env.PORT ?? 3100);
 const deploymentId = process.env.DEPLOYMENT_ID ?? "default";
-const dbPath = process.env.DB_PATH ?? `${process.env.HOME}/.sockt/scratch/orch.sqlite`;
+// process.env.HOME is unset on Windows — the old template literal silently
+// produced the literal path "undefined/.sockt/scratch/orch.sqlite" relative
+// to cwd instead of the user's actual home directory.
+const dbPath = process.env.DB_PATH ?? `${homedir()}/.sockt/scratch/orch.sqlite`;
 
 const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
 await Bun.write(Bun.file(dir + "/.keep"), "");

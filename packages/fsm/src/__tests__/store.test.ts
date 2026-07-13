@@ -166,6 +166,45 @@ describe("SqliteTaskStore", () => {
     });
   });
 
+  describe("resumeIfBlocked", () => {
+    test("resumes a blocked task to pending, clears owner, and sets the new description", async () => {
+      const task = await store.create({ tenantId: "t1", description: "original" });
+      await store.claim(task.id, "agent-1");
+      await store.update(task.id, { status: "blocked" });
+
+      const resumed = await store.resumeIfBlocked(task.id, "joined description");
+      expect(resumed?.status).toBe("pending");
+      expect(resumed?.owner).toBeNull();
+      expect(resumed?.description).toBe("joined description");
+    });
+
+    test("returns null (no-op) when the task is not currently blocked", async () => {
+      const task = await store.create({ tenantId: "t1", description: "original" });
+      // still pending, never blocked
+      const result = await store.resumeIfBlocked(task.id, "should not apply");
+
+      expect(result).toBeNull();
+      const unchanged = await store.get(task.id);
+      expect(unchanged?.description).toBe("original");
+      expect(unchanged?.status).toBe("pending");
+    });
+
+    test("a second call after the first already resumed the task is a no-op (atomic race guard)", async () => {
+      const task = await store.create({ tenantId: "t1", description: "original" });
+      await store.claim(task.id, "agent-1");
+      await store.update(task.id, { status: "blocked" });
+
+      const first = await store.resumeIfBlocked(task.id, "first write");
+      expect(first?.description).toBe("first write");
+
+      const second = await store.resumeIfBlocked(task.id, "second write — should not apply");
+      expect(second).toBeNull();
+
+      const final = await store.get(task.id);
+      expect(final?.description).toBe("first write");
+    });
+  });
+
   describe("listPending", () => {
     test("returns only pending tasks for tenant", async () => {
       await store.create({ tenantId: "t1", description: "A" });
@@ -200,6 +239,22 @@ describe("SqliteTaskStore", () => {
 
       await store.claim(dep.id, "agent-1");
       await store.update(dep.id, { status: "escalated", output: "no leads found" });
+
+      const pending = await store.listPending("t1");
+      expect(pending.map((t) => t.description)).toEqual([]);
+    });
+
+    test("an afterId pointing at a completed task in a DIFFERENT tenant does not unlock the dependent (tenant isolation)", async () => {
+      // Regression: the EXISTS subquery originally matched by `d.id` alone,
+      // with no tenant_id constraint — a task whose afterId happened to
+      // reference another tenant's completed task would incorrectly become
+      // claimable, leaking that tenant's task-completion state across the
+      // tenant boundary.
+      const otherTenantDep = await store.create({ tenantId: "t2", description: "Other tenant's task" });
+      await store.claim(otherTenantDep.id, "agent-1");
+      await store.update(otherTenantDep.id, { status: "completed", output: "done" });
+
+      await store.create({ tenantId: "t1", description: "Depends on someone else's task", afterId: otherTenantDep.id });
 
       const pending = await store.listPending("t1");
       expect(pending.map((t) => t.description)).toEqual([]);

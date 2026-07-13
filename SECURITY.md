@@ -62,14 +62,20 @@ Install: `winget install -h Docker.sbx` (Windows) / `brew install docker/tap/sbx
 
 ### 2. `http_request` has a basic SSRF guard, not a complete one
 
-The built-in `http_request` tool blocks obviously-internal hosts
-(`127.*`, `169.254.*`, `0.0.0.0`, `localhost`) but this is **not** a
-comprehensive SSRF defense — it does not resolve DNS to check for
-internal IPs behind a public hostname, does not block IPv6 loopback/link-local
-forms, and does not enforce an allowlist. If you're deploying agents with
-network access in a multi-tenant or production environment, put a proper
-egress proxy or network policy in front of them. Docker AI Sandboxes ship
-with network policies (`sbx policy allow network <host>`) — use those.
+The built-in `http_request` tool blocks loopback (`127.0.0.0/8`), all three
+RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`),
+link-local addresses including the `169.254.169.254` cloud metadata
+endpoint, `localhost`, IPv6 loopback/link-local/unique-local forms
+(`::1`, `fe80::/10`, `fc00::/7`), IPv4-mapped IPv6 addresses, and
+decimal/hex-encoded IPv4 literals (e.g. `http://2130706433/` ==
+`http://127.0.0.1/`) — but this is still **not** a comprehensive SSRF
+defense: it's a hostname-level check applied before the request is made, so
+it does not resolve DNS first, meaning a public hostname that resolves to a
+private/internal IP at request time is not caught, and it does not enforce
+an allowlist. If you're deploying agents with network access in a
+multi-tenant or production environment, put a proper egress proxy or network
+policy in front of them. Docker AI Sandboxes ship with network policies
+(`sbx policy allow network <host>`) — use those.
 
 ### 3. LLM API keys are encrypted at rest, but decrypted at runtime
 

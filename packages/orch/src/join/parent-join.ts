@@ -1,4 +1,4 @@
-import type { SqliteTaskStore, FsmEngine } from "@sockt/fsm";
+import type { SqliteTaskStore } from "@sockt/fsm";
 import type { TelemetryEmitter } from "@sockt/types";
 
 /** Prefix AgentRunner uses on the `dependency` string of a blocked outcome
@@ -27,11 +27,12 @@ const TERMINAL_STATUSES = new Set(["completed", "escalated", "cancelled"]);
  * owner-clearing requirement /retry and /approve already need, since
  * claimStmt requires status='pending' AND owner IS NULL) so the architect
  * reclaims it and produces ONE final reply instead of the children's
- * outputs going nowhere.
+ * outputs going nowhere. The actual resume (status + description) happens
+ * in a single atomic store.resumeIfBlocked() call rather than via
+ * FsmEngine.transition — see that method's doc for why.
  */
 export async function maybeResumeParent(
   store: SqliteTaskStore,
-  fsm: FsmEngine,
   telemetry: TelemetryEmitter | undefined,
   childId: string,
 ): Promise<void> {
@@ -55,17 +56,15 @@ export async function maybeResumeParent(
     `${parent.description}\n\n${JOIN_MARKER} Results:\n${results}\n\n` +
     `Synthesize ONE final answer for the user from these results. Do NOT call create_task again.`;
 
-  await store.update(parent.id, { description: resumedDescription });
-
-  try {
-    await fsm.transition(parent.id, "blocked", "pending", "system:join");
-    await store.update(parent.id, { owner: null });
-  } catch {
-    // Parent moved out of blocked between our check and now (e.g. a human
-    // cancelled it directly) — the description update above is harmless
-    // either way, just skip the resume.
-    return;
-  }
+  // Single atomic UPDATE...WHERE status='blocked' — if two children finish
+  // close together, both calls can reach this point having both read the
+  // parent as 'blocked', but only one's resumeIfBlocked actually matches a
+  // row (the other's WHERE clause no longer holds once the first has run).
+  // The loser gets null back and skips out — its computed resumedDescription
+  // (built from the same pre-resume parent.description) is simply discarded
+  // instead of being written over the winner's already-joined description.
+  const resumed = await store.resumeIfBlocked(parent.id, resumedDescription);
+  if (!resumed) return;
 
   telemetry?.emit({
     type: "task_children_joined",

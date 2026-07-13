@@ -265,4 +265,19 @@ describe("ApprovalStore.sweepReminders", () => {
     const due = approvalStore.sweepReminders(120_000);
     expect(due).toHaveLength(0);
   });
+
+  test("does not return an approval whose timeout has already passed (regression: reminder+timeout firing in the same sweep tick)", () => {
+    // Without a lower bound on timeout_at, sweepReminders would match this
+    // (timeout_at <= cutoff is trivially true for anything already in the
+    // past too), so the same approval would get a "reminder, times out
+    // soon" message followed immediately by sweepTimeouts' "timed out"
+    // message in the very same sweep interval tick.
+    approvalStore.create({
+      tenantId: "t1", agentId: "a1", taskId: "task-1", tier: "confirm",
+      action: "exec_code", description: "d", timeoutMs: -1000, // already expired
+    });
+
+    const due = approvalStore.sweepReminders(120_000);
+    expect(due).toHaveLength(0);
+  });
 });

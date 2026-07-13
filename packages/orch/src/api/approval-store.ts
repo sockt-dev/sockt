@@ -95,10 +95,16 @@ export class ApprovalStore {
       WHERE kind = 'approval' AND status = 'pending' AND timeout_at IS NOT NULL AND timeout_at <= ?1
       RETURNING *
     `);
+    // timeout_at > ?1 (now) is required, not just <= ?2 (the lead cutoff) —
+    // without a lower bound this also matched approvals whose timeout had
+    // ALREADY passed, so a short-timeout approval could get a "reminder:
+    // still pending, times out soon" message and then, in the very same
+    // sweep tick (sweepTimeouts runs right after this), a "timed out"
+    // message for the same approval.
     this.sweepRemindersStmt = db.prepare(`
       UPDATE pending_human_inputs SET reminded_at = ?1
       WHERE kind = 'approval' AND status = 'pending' AND reminded_at IS NULL
-        AND timeout_at IS NOT NULL AND timeout_at <= ?2
+        AND timeout_at IS NOT NULL AND timeout_at > ?1 AND timeout_at <= ?2
       RETURNING *
     `);
   }

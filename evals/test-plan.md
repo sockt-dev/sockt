@@ -381,3 +381,79 @@ exercised against the real GitHub API outside mocked fetch calls, and the
 Slack reminder/re-request UI has never been seen in an actual Slack client.
 
 This closes the Fable production-hardening spec end to end (Phases 1–5).
+
+## Status update — 2026-07-13 (later): Fable bug-hunt pass — 8 confirmed bugs fixed
+
+A Fable "Plan" agent was asked to read the Phase 1–5 code plus the
+just-shipped `ai`-SDK v4→v7 migration and report concrete, verified bugs
+(not style opinions, not already-documented known limitations). It reported
+9 candidates; one (`mediaType: "image"` on the image content branch of
+`http-client.ts`) turned out to be a false positive on cross-check — a bare
+top-level IANA segment like `"image"` is explicitly valid per the AI SDK's
+own `FilePart.mediaType` documentation (confirmed against the installed
+`@ai-sdk/provider-utils@5.0.7` type declarations) — so it was left alone.
+The other 8 were real and are fixed:
+
+- **Path traversal in `write_file`/`read_file`** (`tools/built-in/file_ops.ts`)
+  — the character-allowlist sanitizer let `../` sequences straight through,
+  so a filename like `"../../../../etc/passwd"` escaped the scratch
+  directory entirely (arbitrary write and read). Fixed with a
+  resolve-and-verify-containment check (`resolveScratchPath`) instead of
+  relying on the character filter alone.
+- **`process.env.HOME` unset on Windows** in both `orch/serve.ts` (task DB
+  path) and `file_ops.ts`'s scratch dir — silently produced a literal
+  `"undefined/..."` or `"~/..."` directory relative to cwd instead of the
+  user's actual home. Confirmed by two stray `undefined/` and `~/` directories
+  already present in the repo from past runs. Fixed with `node:os`'s
+  `homedir()`.
+- **Read-only exec_code allowlist bypass** (`hitl/readonly-allowlist.ts`) —
+  command substitution (`$(...)`, backticks, process substitution `<(...)`)
+  let an arbitrary command run "inside" an allowed one (e.g.
+  `echo $(reboot)` matched the `echo` pattern and had no blocked mutation
+  token), and bare `find` was allowed even with `-delete`/`-exec`/`-ok`
+  actions attached. Both closed: any line containing subshell/process
+  substitution is rejected outright regardless of what else matches, and
+  `find` gets its own stricter check for mutating actions instead of a bare
+  allow.
+- **SSRF guard gaps** (`tools/built-in/http_request.ts`) — the blocklist only
+  covered a handful of literal string prefixes, missing all three RFC1918
+  private ranges (`10/8`, `172.16/12`, `192.168/16`), IPv6 link-local/unique-local
+  forms, IPv4-mapped IPv6, and decimal/hex-encoded IPv4 literals
+  (`http://2130706433/` == `http://127.0.0.1/`). Replaced with numeric range
+  checks covering all of the above; SECURITY.md's SSRF section updated to
+  match the new (still not DNS-rebinding-proof) coverage.
+- **Approval reminder/timeout double-fire** (`orch/api/approval-store.ts`) —
+  `sweepReminders` had no lower bound on `timeout_at`, so it also matched
+  approvals whose timeout had *already passed* — a short-timeout approval
+  could get a "reminder, times out soon" Slack message immediately followed
+  by a "timed out" message in the same 30s sweep tick. Fixed by adding
+  `timeout_at > now` to the query.
+- **Parent-join race condition** (`orch/join/parent-join.ts`) — the resume
+  sequence (read parent → compute joined description → write description →
+  transition status) spanned multiple `await`s with no atomicity, so two
+  children finishing close together could both pass the "still blocked"
+  check and both write a synthesis block, doubling the results text and the
+  `task_children_joined` telemetry event. Fixed by folding the whole resume
+  into one atomic `UPDATE tasks SET status='pending', owner=NULL,
+  description=? WHERE id=? AND status='blocked'`
+  (`SqliteTaskStore.resumeIfBlocked`, same pattern as the existing `claimStmt`)
+  — a losing concurrent call now affects zero rows instead of corrupting the
+  description. `maybeResumeParent` no longer takes an `FsmEngine` parameter
+  (no longer needed).
+- **Cross-tenant `afterId` dependency leak** (`fsm/store/sqlite-task-store.ts`)
+  — the `after_id` `EXISTS` subqueries in both `listPending` and
+  `listPendingWithDeadDependency` matched the dependency row by `id` alone,
+  with no `tenant_id` constraint. `create_task`'s own validation prevents
+  this in normal use, but the raw `POST /tasks` API route does no such
+  ownership check, so a dependency could reference another tenant's task and
+  have that tenant's completion/failure state leak across the tenant
+  boundary. Both queries now also require `d.tenant_id = t.tenant_id`.
+
+**Verification:** all fixes covered by new or extended tests
+(`file_ops.test.ts`, `http_request.test.ts` — both new, no prior coverage
+existed for either tool at all — plus regression cases added to
+`readonly-allowlist.test.ts`, `slack-hitl-bridge.test.ts`'s
+`sweepReminders` block, `parent-join.test.ts`, and `store.test.ts`'s
+`resumeIfBlocked`/tenant-isolation cases). Full suite green apart from
+pre-existing, load-induced timing flakes (confirmed non-regressions by
+re-running the specific failing tests in isolation, where they passed).

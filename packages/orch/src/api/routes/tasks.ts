@@ -50,7 +50,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       if (task && task.status === "in_progress") {
         await fsm.transition(taskId, "in_progress", "escalated", "system:budget");
         telemetry?.emit({ type: "task_budget_exhausted", taskId, tenantId: task.tenantId, data: {} });
-        await maybeResumeParent(store, fsm, telemetry, taskId);
+        await maybeResumeParent(store, telemetry, taskId);
       }
     }
     return c.json({ allowed: result.remaining > 0, remaining: result.remaining });
@@ -65,7 +65,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       lockManager.release(agentId ?? "unknown", taskId);
       const updated = await store.get(taskId);
       telemetry?.emit({ type: "task_completed", taskId, tenantId: task.tenantId, data: { output } });
-      await maybeResumeParent(store, fsm, telemetry, taskId);
+      await maybeResumeParent(store, telemetry, taskId);
       return c.json(updated);
     } catch {
       return c.json({ error: "Task is not in_progress" }, 400);
@@ -80,7 +80,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       await store.update(taskId, { output: reason });
       lockManager.release(agentId ?? "unknown", taskId);
       telemetry?.emit({ type: "task_escalated", taskId, tenantId: task.tenantId, data: { reason } });
-      await maybeResumeParent(store, fsm, telemetry, taskId);
+      await maybeResumeParent(store, telemetry, taskId);
       return c.json(task);
     } catch {
       return c.json({ error: "Task is not in_progress" }, 400);
@@ -145,7 +145,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
       if (task && task.status === "in_progress") {
         await fsm.transition(taskId, "in_progress", "escalated", "system:budget");
         telemetry?.emit({ type: "task_budget_exhausted", taskId, tenantId: task.tenantId, data: {} });
-        await maybeResumeParent(store, fsm, telemetry, taskId);
+        await maybeResumeParent(store, telemetry, taskId);
       }
     }
     return c.json(result);
@@ -195,7 +195,7 @@ export function taskRoutes(deps: TaskRouteDeps): Hono {
     try {
       const updated = await store.update(taskId, { status: "cancelled" });
       telemetry?.emit({ type: "task_cancelled", taskId, tenantId: task.tenantId, data: {} });
-      await maybeResumeParent(store, fsm, telemetry, taskId);
+      await maybeResumeParent(store, telemetry, taskId);
       return c.json(updated);
     } catch {
       return c.json({ error: "Cannot cancel task" }, 400);

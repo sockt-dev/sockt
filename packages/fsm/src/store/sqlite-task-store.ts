@@ -67,6 +67,7 @@ export class SqliteTaskStore implements TaskStore {
   private readonly countByStatusStmt: Statement;
   private readonly incrementLlmStmt: Statement;
   private readonly claimStmt: Statement;
+  private readonly resumeIfBlockedStmt: Statement;
   private readonly listAllByTenantStmt: Statement;
   private readonly listByStatusAndTenantStmt: Statement;
 
@@ -89,20 +90,31 @@ export class SqliteTaskStore implements TaskStore {
     // dependency instead escalates/is cancelled, this task waits forever
     // here; listPendingWithDeadDependency (below) is how the orch API's
     // periodic sweep finds and cancels those rather than leaving them stuck.
+    // Dependency lookups are scoped to the dependent's own tenant_id, not
+    // just matched by id — id is a UUID (effectively globally unique), so
+    // this isn't guarding against an id collision, it's guarding against a
+    // task's afterId being set (via the raw POST /tasks API, which does no
+    // ownership check — create_task's own validation only applies to its
+    // own callers) to point at another tenant's task. Without the tenant_id
+    // match, a completed/dead task belonging to a different tenant would
+    // still resolve the dependency, leaking that tenant's task-completion
+    // signal across the tenant boundary.
     this.listPendingStmt = db.prepare(`
       SELECT * FROM tasks t
       WHERE t.tenant_id = ?1 AND t.status = 'pending'
         AND (t.after_id IS NULL OR EXISTS (
-              SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.status = 'completed'))
+              SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.tenant_id = t.tenant_id AND d.status = 'completed'))
     `);
 
     // Unscoped across tenants, like ApprovalStore.sweepTimeouts() — this
     // backs a periodic background sweep, not a per-request tenant-scoped
-    // read, so there's no tenant to filter by until a row is found.
+    // read, so there's no tenant to filter by until a row is found. The
+    // dependency match itself is still tenant-scoped (d.tenant_id = t.tenant_id)
+    // for the same cross-tenant-reference reason as listPendingStmt above.
     this.listPendingWithDeadDependencyStmt = db.prepare(`
       SELECT * FROM tasks t
       WHERE t.status = 'pending' AND t.after_id IS NOT NULL
-        AND EXISTS (SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.status IN ('escalated', 'cancelled'))
+        AND EXISTS (SELECT 1 FROM tasks d WHERE d.id = t.after_id AND d.tenant_id = t.tenant_id AND d.status IN ('escalated', 'cancelled'))
     `);
 
     this.listByParentStmt = db.prepare(
@@ -124,6 +136,25 @@ export class SqliteTaskStore implements TaskStore {
     this.claimStmt = db.prepare(`
       UPDATE tasks SET status = 'in_progress', owner = ?2, updated_at = ?3
       WHERE id = ?1 AND status = 'pending' AND owner IS NULL
+      RETURNING *
+    `);
+
+    // Single atomic UPDATE...WHERE status='blocked', same pattern as
+    // claimStmt above — used by orch's parent-join resume (see
+    // packages/orch/src/join/parent-join.ts) so that when two children of
+    // the same parent finish around the same time, only one of their two
+    // concurrent maybeResumeParent calls can actually win the resume. A
+    // separate "read status, then write description, then transition"
+    // sequence (the original implementation) has an await-boundary race: a
+    // second caller can read the parent as still 'blocked' and overwrite
+    // the first caller's already-joined description with a second synthesis
+    // block before either caller's status transition lands. Folding the
+    // status guard into the same statement that writes the new description
+    // means a loser's call affects zero rows instead of corrupting the
+    // description.
+    this.resumeIfBlockedStmt = db.prepare(`
+      UPDATE tasks SET status = 'pending', owner = NULL, description = ?2, updated_at = ?3
+      WHERE id = ?1 AND status = 'blocked'
       RETURNING *
     `);
 
@@ -246,6 +277,17 @@ export class SqliteTaskStore implements TaskStore {
   async listPendingWithDeadDependency(): Promise<Task[]> {
     const rows = this.listPendingWithDeadDependencyStmt.all() as TaskRow[];
     return rows.map(mapRow);
+  }
+
+  /** Atomically resumes a 'blocked' task to 'pending' (owner cleared) while
+   * setting its description in the same statement — returns null (zero rows
+   * affected) if the task wasn't 'blocked' anymore by the time this ran, so
+   * a caller can tell "I lost the race" apart from "this succeeded" without
+   * a separate read-then-write window. See parent-join.ts for why this
+   * needs to be one statement rather than update-description-then-transition. */
+  async resumeIfBlocked(id: string, description: string): Promise<Task | null> {
+    const row = this.resumeIfBlockedStmt.get(id, description, now()) as TaskRow | undefined;
+    return row ? mapRow(row) : null;
   }
 
   async listByParent(parentId: string): Promise<Task[]> {
