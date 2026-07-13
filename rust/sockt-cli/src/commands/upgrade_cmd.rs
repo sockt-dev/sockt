@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
-const DEFAULT_RELEASE_URL: &str = "https://api.github.com/repos/sockt/sockt/releases";
+const DEFAULT_RELEASE_URL: &str = "https://api.github.com/repos/sockt-dev/sockt/releases";
 
 #[derive(Deserialize, Debug)]
 struct GithubRelease {
