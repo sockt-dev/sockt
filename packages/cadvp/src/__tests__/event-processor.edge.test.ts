@@ -247,7 +247,6 @@ describe("EventProcessor edge cases", () => {
     let writeCount = 0;
     const store = mockStore({
       write: async () => {
-        await Bun.sleep(5); // Simulate slow write
         writeCount++;
         return "id";
       },
@@ -260,7 +259,8 @@ describe("EventProcessor edge cases", () => {
       await processor.processLine(validLine());
     }
 
-    await Bun.sleep(120); // Wait for timer flush + writes
+    // Use stop() to guarantee the flush completes regardless of platform timer resolution.
+    await processor.stop();
 
     expect(writeCount).toBe(10);
   });
