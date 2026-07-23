@@ -23,7 +23,7 @@
     "url": "https://github.com/sockt-dev/sockt.git"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external @sockt/* && tsc --project tsconfig.build.json",
+    "build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --format esm --splitting --sourcemap=external --external '@sockt/*' && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
