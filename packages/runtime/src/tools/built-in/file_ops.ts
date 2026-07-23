@@ -1,8 +1,8 @@
 import type { ToolDefinition } from "@sockt/types";
 import type { ToolHandler } from "../../types.ts";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 
 // process.env.HOME is unset on Windows — the old `process.env.HOME ?? "~"`
 // fallback left files landing in a literal "~" directory under cwd instead
@@ -56,6 +56,7 @@ export const writeFileHandler: ToolHandler = async (args) => {
   await ensureDir(dir);
   const path = resolveScratchPath(dir, filename);
 
+  await mkdir(dirname(path), { recursive: true });
   if (append) {
     await appendFile(path, content, "utf8");
   } else {
