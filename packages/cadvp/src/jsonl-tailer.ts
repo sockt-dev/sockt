@@ -50,7 +50,7 @@ export class JsonlTailer {
 
   private startWatching(filePath: string): void {
     try {
-      const watcher = watch(filePath, (eventType) => {
+      const watcher = watch(filePath, (eventType: string) => {
         if (eventType === "change" && !this.stopped) {
           this.readNewLines(filePath);
         }
