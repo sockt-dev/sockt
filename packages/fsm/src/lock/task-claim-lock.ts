@@ -17,6 +17,8 @@ interface TaskRow {
   max_attempts: number;
   target_department: string | null;
   target_role: string | null;
+  target_skill: string | null;
+  after_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +38,8 @@ function mapRow(row: TaskRow): Task {
     maxAttempts: row.max_attempts,
     targetDepartment: row.target_department,
     targetRole: row.target_role,
+    targetSkill: row.target_skill,
+    afterId: row.after_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
