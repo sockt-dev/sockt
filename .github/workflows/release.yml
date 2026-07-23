@@ -195,7 +195,8 @@ jobs:
           PACKAGES=(types fsm memory slack-gateway runtime orch cadvp)
           for p in "${PACKAGES[@]}"; do
             pkg="packages/$p/package.json"
-            npm version "$VER" --no-git-tag-version --prefix "packages/$p"
+            CURR=$(node -e "console.log(require('./packages/${p}/package.json').version)")
+            [ "$CURR" = "$VER" ] || npm version "$VER" --no-git-tag-version --prefix "packages/$p"
             node -e '
               const fs = require("fs");
               const path = process.argv[1];
