@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import type { AgentConfig, AgentRole, ChannelGateway, TelemetryEmitter, HitlGate, InboundMessage, Task, TaskCreate } from "@sockt/types";
 import { SqliteTaskStore, FsmEngine, TaskClaimLock } from "@sockt/fsm";
 import { OrchestratorApi } from "./api/server.ts";
@@ -70,10 +70,7 @@ export class Orchestrator {
   constructor(config: OrchestratorConfig) {
     this.config = config;
 
-    const db = config.db ?? (() => {
-      const { Database } = require("bun:sqlite");
-      return new Database(config.dbPath);
-    })();
+    const db = config.db ?? new Database(config.dbPath);
 
     this.store = new SqliteTaskStore(db);
     this.fsm = new FsmEngine(this.store);

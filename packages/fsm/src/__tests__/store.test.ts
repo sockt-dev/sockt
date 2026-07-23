@@ -4,6 +4,7 @@ import { createTestDb } from "../util/test-db.ts";
 import { initializeSchema } from "../store/schema.ts";
 import { TaskStoreError } from "@sockt/types";
 import { Database } from "bun:sqlite";
+import fs from "node:fs";
 
 let store: SqliteTaskStore;
 
@@ -412,7 +413,7 @@ describe("SqliteTaskStore", () => {
       // a file that was *just* closed. Cleanup, not the test's assertion
       // (already passed above), so best-effort: retry briefly, then give up
       // silently rather than fail the test over a temp-file leak.
-      const fs = require("fs");
+
       for (const suffix of ["", "-wal", "-shm"]) {
         for (let attempt = 0; attempt < 5; attempt++) {
           try {
