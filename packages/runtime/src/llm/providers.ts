@@ -16,7 +16,10 @@ function openAiCompatible(options: Parameters<typeof createOpenAI>[0]) {
   return createOpenAI(options).chat;
 }
 
-export function getProvider(config: LlmConfig) {
+// Return type is intentionally `unknown` here — each branch returns a different
+// AI SDK provider instance. Callers narrow via the AI SDK's own overloads.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getProvider(config: LlmConfig): any {
   switch (config.provider) {
     case "anthropic":
       return createAnthropic({ apiKey: config.apiKey, baseURL: config.baseUrl });
