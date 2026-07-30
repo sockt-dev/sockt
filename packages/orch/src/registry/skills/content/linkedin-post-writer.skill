@@ -1,0 +1,48 @@
+{
+  "name": "linkedin-post-writer",
+  "description": "Write high-performing LinkedIn posts using 2026 native-format strategies: hook-whitespace-bullets pattern, storytelling posts, and carousel briefs for B2B SaaS/tech",
+  "steps": [
+    {
+      "action": "Choose post format based on goal: (a) Storytelling — personal insight/failure/lesson (highest organic reach 2026) (b) Value list — '5 things I learned from X' (c) Contrarian take — 'Hot take: [position]. Here's why it's right.' (d) Carousel brief — outline for a visual carousel post",
+      "expectedOutcome": "Format chosen and documented before writing"
+    },
+    {
+      "action": "Write the hook (first 2 lines, before 'see more' fold): must stand completely alone and create a curiosity gap or make a bold claim. 2026 high-performers: personal transformation ('I went from X to Y'), uncomfortable truth ('Most [role]s get this wrong'), specific result ('We hit $[N] ARR by doing the opposite of what VCs told us'). Max 2 sentences total.",
+      "expectedOutcome": "Hook that stops scroll without being clickbait. No 'I'm excited to share' or corporate language."
+    },
+    {
+      "action": "Write the body: use radical white space — 1-2 sentences per paragraph maximum, blank line between each. For storytelling: context → conflict → resolution → lesson. For value lists: one bullet per line, each starting with a strong verb or number. Total post: 900-1200 characters for peak algorithmic reach.",
+      "expectedOutcome": "Body is scannable on mobile. Each paragraph pushes reader to next. No walls of text."
+    },
+    {
+      "action": "Write the close (last 2-3 lines): deliver the payoff insight — the thing that makes the whole post worth reading. End with either a resonant declarative statement, or a single question inviting reply (not a sales pitch).",
+      "expectedOutcome": "Satisfying close that rewards the reader. Ends on insight, not ask."
+    },
+    {
+      "action": "Add hashtags (3-5 max, appended after a blank line): use niche-specific tags, not generic (#marketing is too broad, #b2bsaas or #saasfounder is better). If carousel, also write the 6-8 slide headlines.",
+      "tool": "write_file",
+      "args": { "filename": "linkedin_post_draft.md" },
+      "expectedOutcome": "Post saved to file. Hashtags specific. Carousel headlines included if applicable."
+    }
+  ],
+  "preconditions": [
+    "Topic, angle, or source material provided",
+    "Brand voice or author persona context available",
+    "Any metrics/results mentioned must come from provided context — do not fabricate"
+  ],
+  "successCriteria": [
+    "Hook stops scroll and creates curiosity gap within first 2 lines",
+    "Post body uses single-sentence paragraphs with white space",
+    "Total length 900-1200 characters (optimal for LinkedIn algorithm 2026)",
+    "No corporate jargon or empty phrases ('excited to share', 'thrilled to announce')",
+    "Hashtag count 3-5, each topic-specific not generic"
+  ],
+  "checks": [
+    { "criterion": "Hook is two lines max and creates a curiosity gap", "type": "human_review" },
+    { "criterion": "White space structure (no paragraph longer than 2 sentences)", "type": "human_review" },
+    { "criterion": "Length 900-1200 characters", "type": "human_review" },
+    { "criterion": "No fabricated metrics or results", "type": "human_review" }
+  ],
+  "compiledFrom": "justin-welsh/linkedin-os@post-frameworks + taplio/content-research@2026-formats + charlie947/social-media-skills@hook-generator",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}

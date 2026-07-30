@@ -1,0 +1,69 @@
+{
+  "name": "slack-approval-publisher",
+  "description": "Send content drafts to a Slack channel for human approval, wait for thumbs-up/rejection, then publish approved content to the target platform via API",
+  "steps": [
+    {
+      "action": "Read the draft content from file. Validate it has all required fields: platform, post body, optional media/attachments, scheduled time or 'post now' flag.",
+      "tool": "read_file",
+      "args": { "filename": "{{draft_file}}" },
+      "expectedOutcome": "Draft loaded. Platform and content body confirmed present."
+    },
+    {
+      "action": "Format the Slack approval message: include (1) platform badge (2) full draft text formatted as a code block (3) character count (4) approve/reject prompt. Use post_to_slack to send to the approval channel. Include the task_id in the message footer so the approval can be routed back.",
+      "tool": "post_to_slack",
+      "args": {
+        "channel": "{{approval_channel}}",
+        "text": "📝 *Content Draft — {{platform}}*\n\nApprove with ✅ or reject with ❌\n\n```{{draft_body}}```\n\n_{{char_count}} chars | Task: {{task_id}}_"
+      },
+      "expectedOutcome": "Approval message sent to Slack. Message timestamp recorded."
+    },
+    {
+      "action": "Request formal HITL approval using request_approval. Set timeout to 24 hours. The approval payload must include platform, draft_body, and the Slack message reference.",
+      "tool": "request_approval",
+      "args": {
+        "type": "content_publish",
+        "payload": { "platform": "{{platform}}", "draft_body": "{{draft_body}}", "task_id": "{{task_id}}" },
+        "timeoutMs": 86400000
+      },
+      "expectedOutcome": "Approval request created. Waiting for human decision."
+    },
+    {
+      "action": "On APPROVED: publish to the target platform via http_request using the platform's API. Twitter/X: POST to Twitter API v2 /tweets. LinkedIn: POST to LinkedIn API /ugcPosts. YouTube: POST video metadata to YouTube Data API v3. Log the published URL.",
+      "tool": "http_request",
+      "args": {
+        "method": "POST",
+        "url": "{{platform_api_url}}",
+        "headers": { "Authorization": "Bearer {{platform_token}}" },
+        "body": { "text": "{{draft_body}}" }
+      },
+      "expectedOutcome": "Post published. Response contains published post URL/ID."
+    },
+    {
+      "action": "On REJECTED: read the rejection note from the approval decision. Save the rejected draft and note to file. Post a summary back to Slack: 'Draft rejected — reason: [note]. Returning to writer.' Do NOT publish.",
+      "tool": "write_file",
+      "args": { "filename": "rejected_draft_{{task_id}}.md" },
+      "expectedOutcome": "Rejection logged to file. Slack notified. Task returns FAILED status for re-attempt."
+    }
+  ],
+  "preconditions": [
+    "Draft content file exists and is fully written",
+    "SLACK_APPROVAL_CHANNEL env var set",
+    "Platform API credentials available (TWITTER_BEARER_TOKEN, LINKEDIN_ACCESS_TOKEN, or YOUTUBE_API_KEY)",
+    "HITL gate is running and accepting approval requests"
+  ],
+  "successCriteria": [
+    "Approval message sent to Slack with full draft visible",
+    "Formal approval request created with 24h timeout",
+    "On approval: post published and URL logged",
+    "On rejection: reason saved to file, no publish attempted",
+    "All outcomes (approve/reject/timeout) handled explicitly"
+  ],
+  "checks": [
+    { "criterion": "Slack message sent before HITL request", "type": "human_review" },
+    { "criterion": "Approved content published via correct platform API", "type": "human_review" },
+    { "criterion": "Rejected content NOT published", "type": "human_review" },
+    { "criterion": "Rejection reason saved to file", "type": "regex_present", "pattern": "rejected_draft_", "flags": "i" }
+  ],
+  "compiledFrom": "MMEHDI0606/ai-agent-foundation-template@hitl-approval + sockt/internal@channel-gateway",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}

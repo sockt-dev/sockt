@@ -1,0 +1,50 @@
+{
+  "name": "content-repurposing",
+  "description": "Transform one source piece (blog post, podcast, video, case study, or data report) into platform-native formats for X, LinkedIn, and YouTube/TikTok — not copy-paste, genuinely reformatted",
+  "steps": [
+    {
+      "action": "Ingest the source content using read_file or http_request (fetch URL). Extract: (1) the single strongest thesis (2) 3-5 key insights with supporting data or examples (3) any quotable lines or surprising statistics (4) the core story arc if narrative content.",
+      "tool": "read_file",
+      "args": { "filename": "{{source_file}}" },
+      "expectedOutcome": "Distilled source: thesis + 3-5 insights + quotes/stats"
+    },
+    {
+      "action": "Repurpose for X/Twitter: pick the single most surprising insight from the source. Build it into a 6-9 tweet thread using the x-thread-writer skill. The hook must be different from the source's headline — find a more specific or counterintuitive angle.",
+      "expectedOutcome": "X thread draft (6-9 tweets) with a distinct hook angle from the original"
+    },
+    {
+      "action": "Repurpose for LinkedIn: choose a different insight than the one used for X. Write a storytelling or value-list post (600-1200 chars) using the linkedin-post-writer skill. Surface a 'lesson learned' angle that worked directly from the source material.",
+      "expectedOutcome": "LinkedIn post with unique angle not duplicating the X thread"
+    },
+    {
+      "action": "Repurpose for YouTube/TikTok: identify which insight would show best visually or verbally as a 60-90 second short. Write a short-form script with open-loop hook, 3 punchy points, and CTA using the youtube-script-writer skill. Include [ON-SCREEN TEXT] for key stats.",
+      "expectedOutcome": "60-90 second script for Shorts/Reels/TikTok with visual cues"
+    },
+    {
+      "action": "Write a repurposing summary noting: source URL/file, what angle each platform used, what was cut (and why), and any platform-specific adaptations made. Save all outputs to files.",
+      "tool": "write_file",
+      "args": { "filename": "repurposed_content.md" },
+      "expectedOutcome": "4 files: x_thread_draft.md, linkedin_post_draft.md, video_script_draft.md, repurposing_summary.md"
+    }
+  ],
+  "preconditions": [
+    "Source content provided (file path, URL, or raw text)",
+    "Target platforms specified (X, LinkedIn, YouTube/TikTok, or subset)",
+    "Each platform output uses a distinct angle — no copy-paste"
+  ],
+  "successCriteria": [
+    "Each platform piece uses a genuinely different angle from the source and from each other",
+    "X thread hook is more specific/surprising than the source headline",
+    "LinkedIn post has white-space formatting, not a paste of the original",
+    "Video script includes open-loop hook and [ON-SCREEN TEXT] cues",
+    "Repurposing summary documents what was changed and why"
+  ],
+  "checks": [
+    { "criterion": "X thread uses distinct angle", "type": "human_review" },
+    { "criterion": "LinkedIn post has white space structure", "type": "human_review" },
+    { "criterion": "Video script has [ON-SCREEN TEXT] markers", "type": "regex_present", "pattern": "\\[ON-SCREEN TEXT\\]", "flags": "gi" },
+    { "criterion": "Each piece is platform-native, not copy-pasted", "type": "human_review" }
+  ],
+  "compiledFrom": "repurpose.io/content-strategy@2026 + dickie-bush/ship30@repurposing-framework + buffer/repurpose-playbook",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}

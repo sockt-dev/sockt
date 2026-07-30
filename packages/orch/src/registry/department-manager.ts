@@ -4,18 +4,20 @@ import { growthTemplate } from "./templates/growth.ts";
 import { productTemplate } from "./templates/product.ts";
 import { engOpsTemplate } from "./templates/eng-ops.ts";
 import { supportTemplate } from "./templates/support.ts";
+import { contentTemplate } from "./templates/content.ts";
 
 // "engops" (no hyphen) to match the runtime's DEPARTMENT env var and the
 // skills directory naming (packages/orch/src/registry/skills/engops/) — was
 // "eng-ops" here only, a naming mismatch that would have broken routing the
 // moment this dead-code template path got wired up. Fixed 2026-07-11.
-export type DepartmentTemplate = "growth" | "product" | "engops" | "support";
+export type DepartmentTemplate = "growth" | "product" | "engops" | "support" | "content";
 
 const TEMPLATE_FACTORIES: Record<DepartmentTemplate, (tenantId: string) => AgentConfig[]> = {
   growth: growthTemplate,
   product: productTemplate,
   engops: engOpsTemplate,
   support: supportTemplate,
+  content: contentTemplate,
 };
 
 export class DepartmentManager {

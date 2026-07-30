@@ -1,0 +1,48 @@
+{
+  "name": "x-thread-writer",
+  "description": "Write high-performing X/Twitter threads using open-loop hooks, numbered tweet structure, and value-first sequencing for B2B/tech audiences",
+  "steps": [
+    {
+      "action": "Identify the core insight or story: one specific thing the reader will learn or feel — not a topic, but a thesis. If not given, use web_search to find a recent angle with engagement signal",
+      "expectedOutcome": "A single sentence thesis that can only be proved by reading the thread"
+    },
+    {
+      "action": "Write Tweet 1 (hook): max 240 chars. Use one of these 2026 formats: (a) Open loop — 'X years ago I [did thing]. Here's what happened:' (b) Contrarian — 'Everyone says X. They're wrong. Thread:' (c) Metric-led — '[Specific number] [unexpected result]. How:' (d) Admission — 'I made a $[N] mistake. You can avoid it.' DO NOT start with 'I think' or questions.",
+      "expectedOutcome": "Hook that withholds resolution, creates curiosity, compels scroll"
+    },
+    {
+      "action": "Write Tweets 2-7 (body): each tweet = one idea, under 240 chars, no filler. Format: assertion → evidence or example. Use white space (one sentence per line max). Each tweet must be able to stand alone as a quote. Number each: '2/', '3/' etc.",
+      "expectedOutcome": "Each tweet delivers one concrete insight. No repetition. No vague adjectives."
+    },
+    {
+      "action": "Write Tweet 8 (pivot/proof tweet): share a result, metric, or surprising outcome that proves the hook's premise. This is the payoff — make it specific.",
+      "expectedOutcome": "Specific metric or outcome that validates the thread's thesis"
+    },
+    {
+      "action": "Write Tweet 9 (CTA): one ask only. Options: (a) 'Follow me for [specific thing] every week' (b) 'Reply with [X] if you want [resource]' (c) 'RT if this changed how you think about [topic]'. No multiple CTAs.",
+      "tool": "write_file",
+      "args": { "filename": "x_thread_draft.md" },
+      "expectedOutcome": "Single clear CTA. Thread saved to file."
+    }
+  ],
+  "preconditions": [
+    "Topic, angle, or source material provided",
+    "Brand voice / tone guidance available (or use neutral authoritative B2B tech voice)",
+    "No fabricated metrics — all numbers must come from provided context"
+  ],
+  "successCriteria": [
+    "Hook tweet creates open loop — reader cannot resolve it without reading the thread",
+    "Each body tweet is under 240 chars and self-contained",
+    "Proof tweet has a specific metric or concrete outcome",
+    "Exactly one CTA in final tweet",
+    "No vague adjectives (good, great, amazing, incredible) — specifics only"
+  ],
+  "checks": [
+    { "criterion": "Hook creates open loop", "type": "human_review" },
+    { "criterion": "Body tweets under 240 chars each", "type": "regex_present", "pattern": "^\\d+\\/", "flags": "gm" },
+    { "criterion": "Exactly one CTA in final tweet", "type": "human_review" },
+    { "criterion": "No fabricated metrics", "type": "human_review" }
+  ],
+  "compiledFrom": "hypefury/thread-frameworks@2026 + dickie-bush/ship30@hook-science + charlie947/social-media-skills@post-writer",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}

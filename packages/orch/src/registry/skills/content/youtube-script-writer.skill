@@ -1,0 +1,49 @@
+{
+  "name": "youtube-script-writer",
+  "description": "Write YouTube and TikTok/Reels video scripts using the 2026 Open Loop + Problem-Stakes-Solution-Proof structure with pattern interrupts",
+  "steps": [
+    {
+      "action": "Define the video's single promise: one sentence stating exactly what the viewer will know or be able to do by the end. This becomes the thumbnail concept and title backbone.",
+      "expectedOutcome": "One-sentence promise. Can be read aloud as the video title."
+    },
+    {
+      "action": "Write the Hook (first 3-7 seconds for TikTok/Reels, first 15-30 seconds for YouTube): 2026 hook formulas — (a) Open loop: 'What I'm about to tell you will change how you [X] forever. But first—' (b) Stakes: 'If you don't fix [X] in the next [timeframe], [consequence].' (c) Pattern interrupt: Start mid-action or mid-sentence, no intro. (d) Proof-first: Show the result on screen immediately, explain after. For YouTube: hook must justify why THIS video is better than the 10 others on this topic.",
+      "expectedOutcome": "Hook that hooks in 3 seconds (TikTok) or 15 seconds (YouTube). Viewer must feel they CANNOT skip."
+    },
+    {
+      "action": "Write the Body using Problem-Stakes-Solution-Proof structure: (P) Problem — name it specifically, not vaguely. (S) Stakes — why this matters / cost of not fixing it. (S) Solution — step-by-step, numbered, concrete. (P) Proof — result, data point, case study. Keep each section tight: 30-60 seconds of talking time. Add [PATTERN INTERRUPT] markers every 60 seconds where tone/visual should change.",
+      "expectedOutcome": "4-section body with clear transitions. Each section has a [PATTERN INTERRUPT] suggestion."
+    },
+    {
+      "action": "Write the CTA bridge (before final CTA): 'Before you go, one more thing that ties this all together…' — add a bonus tip or insight not teased in the title. This is the reward for watching to the end.",
+      "expectedOutcome": "Bonus insight that rewards completion. Not a repeat of earlier content."
+    },
+    {
+      "action": "Write the CTA: for YouTube — subscribe + comment prompt (ask a specific question to reply to, not generic 'like and subscribe'). For TikTok — follow + duet/stitch hook. Then write B-roll suggestions and on-screen text suggestions in brackets throughout the script.",
+      "tool": "write_file",
+      "args": { "filename": "video_script_draft.md" },
+      "expectedOutcome": "Complete script with timing markers, [B-ROLL] tags, [ON-SCREEN TEXT] tags, and one specific comment-prompt CTA."
+    }
+  ],
+  "preconditions": [
+    "Topic and target platform (YouTube vs TikTok/Reels) specified",
+    "Estimated video length target (60s, 3-5 min, 8-12 min)",
+    "Brand voice or on-screen persona guidance provided",
+    "All claims and statistics must come from provided context"
+  ],
+  "successCriteria": [
+    "Hook resolves ambiguity in 3s (TikTok) or 15s (YouTube) — tested by reading it aloud",
+    "Script includes [PATTERN INTERRUPT] markers every ~60 seconds of content",
+    "Body follows Problem-Stakes-Solution-Proof order",
+    "Exactly one CTA, with a specific question or action prompt",
+    "B-roll and on-screen text suggestions present throughout"
+  ],
+  "checks": [
+    { "criterion": "Hook hooks in first 3-15 seconds", "type": "human_review" },
+    { "criterion": "Pattern interrupt markers present", "type": "regex_present", "pattern": "\\[PATTERN INTERRUPT\\]", "flags": "g" },
+    { "criterion": "B-roll tags present", "type": "regex_present", "pattern": "\\[B-ROLL\\]", "flags": "gi" },
+    { "criterion": "Single CTA at end", "type": "human_review" }
+  ],
+  "compiledFrom": "mrbeast-scriptwriting@hook-science + patflynn/smart-passive@youtube-os + vidIQ/content-strategy@2026",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}

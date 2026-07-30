@@ -1,0 +1,50 @@
+{
+  "name": "content-calendar",
+  "description": "Plan a weekly or monthly content calendar with content pillars, platform-specific posting cadence, and content briefs ready to hand to writers",
+  "steps": [
+    {
+      "action": "Define 3-5 content pillars for the brand: pillars should cover (a) expertise/authority (b) audience pain points (c) social proof/results (d) culture/behind-the-scenes (e) product/offer. Each pillar should produce multiple pieces per month. Ask for or infer from brand context.",
+      "expectedOutcome": "3-5 named pillars with 2-sentence description each"
+    },
+    {
+      "action": "Set posting cadence per platform based on 2026 best practices: X/Twitter — 1-2 threads/week + 3-5 short posts; LinkedIn — 4-5 posts/week (M-F, never weekends); YouTube — 1 video/week or 1 per 2 weeks; TikTok/Reels — 3-5/week. Map each pillar to a day-of-week slot.",
+      "expectedOutcome": "Cadence table: platform × day × pillar"
+    },
+    {
+      "action": "Use web_search to identify 3-5 trending topics or conversations in the brand's niche for this week. Check relevant subreddits, X trending, LinkedIn trending articles. Surface real-time angles to weave into planned posts.",
+      "tool": "web_search",
+      "args": { "query": "{{brand_niche}} trending topic discussion 2026" },
+      "expectedOutcome": "3-5 current topics with source URLs"
+    },
+    {
+      "action": "Write a content brief for each planned post: (1) platform (2) pillar (3) angle/hook idea (4) key point to make (5) CTA (6) target publish date. Group by week. Make each brief specific enough that a writer can produce the post without follow-up questions.",
+      "expectedOutcome": "N content briefs (one per planned post) covering the calendar period"
+    },
+    {
+      "action": "Save the full calendar to file as a markdown table: Date | Platform | Pillar | Hook Idea | Status (Draft/Pending/Published)",
+      "tool": "write_file",
+      "args": { "filename": "content_calendar.md" },
+      "expectedOutcome": "Markdown calendar table + individual briefs saved to file"
+    }
+  ],
+  "preconditions": [
+    "Brand name, niche, and target audience defined",
+    "Calendar period specified (week or month)",
+    "Platforms confirmed (X, LinkedIn, YouTube, TikTok or subset)"
+  ],
+  "successCriteria": [
+    "3-5 content pillars defined with descriptions",
+    "Posting cadence set per platform using 2026 best practices",
+    "At least 3 trending topics sourced from real-time search",
+    "Each content brief is self-contained — writer needs no follow-up",
+    "Calendar covers the full requested period with no gaps"
+  ],
+  "checks": [
+    { "criterion": "Content pillars defined", "type": "regex_present", "pattern": "pillar|content pillar", "flags": "i" },
+    { "criterion": "Calendar table present in output", "type": "regex_present", "pattern": "\\|.*Platform.*\\|.*Pillar", "flags": "i" },
+    { "criterion": "Real-time topics included", "type": "human_review" },
+    { "criterion": "Each brief is self-contained", "type": "human_review" }
+  ],
+  "compiledFrom": "later/content-strategy@calendar-frameworks + buffer/2026-social-report + MMEHDI0606/ai-agent-foundation-template@content-ops",
+  "compiledAt": "2026-07-30T00:00:00.000Z"
+}
