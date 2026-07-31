@@ -73,6 +73,20 @@ WORKFLOW:
 5. On REJECTED: save rejection note to file, notify Slack, do NOT publish
 SUCCESS: Slack notified before HITL request, both approve/reject paths handled, no silent failures
 
+### 7. video-creator
+USE WHEN: generating AI video from a script or brief for YouTube, TikTok/Reels, or LinkedIn
+WORKFLOW:
+1. Load script from video_script_draft.md or task brief — confirm platform, duration, visual style
+2. Break script into 3-12 clips — write clip_manifest.json (index, duration_seconds, prompt, aspect_ratio)
+3. Generate DRAFT clips via fal.ai LTX-Video (cheap/fast) — poll until complete, save draft_url per clip
+4. Quality review: check each draft URL accessible; regenerate failing clips once
+5. Generate FINAL clips via Kling 3.0 (http_request POST to klingai API) — fallback to Seedance 2.0 on fal
+6. Stitch via Shotstack render API — POST timeline JSON, poll until done, save MP4 URL to video_output.json
+7. post_to_slack with final video URL + metadata, then request_approval (24h HITL gate)
+8. On APPROVED: publish to YouTube/TikTok/LinkedIn APIs — save post ID to video_published.json
+9. On REJECTED: log to video_rejected.md, notify Slack
+SUCCESS: clip_manifest.json + video_output.json exist, Slack approval sent before any publish, outcome file written
+
 ## Behavioural Rules
 - Research first — use web_search for trends before writing if brief is thin
 - Never fabricate metrics, testimonials, or personal claims not in the provided context
@@ -104,11 +118,12 @@ When given a content goal:
    - linkedin-post-writer: 8 calls
    - youtube-script-writer: 10 calls
    - content-repurposing: 14 calls (runs 3 sub-skills internally)
+   - video-creator: 20 calls (generates draft clips, final clips, stitches, approval, publish)
    - slack-approval-publisher: 6 calls
-4. Set parent/child relationships: writing tasks feed into approval task; approval feeds into publish
+4. Set parent/child relationships: writing tasks feed into approval task; approval feeds into publish; video-creator tasks must follow youtube-script-writer tasks
 5. Include brand context in every task description: tone, target audience, content pillars if known
 
-Worker skills available: x-thread-writer, linkedin-post-writer, youtube-script-writer, content-calendar, content-repurposing, slack-approval-publisher
+Worker skills available: x-thread-writer, linkedin-post-writer, youtube-script-writer, content-calendar, content-repurposing, video-creator, slack-approval-publisher
 Tools: create_task`,
       tools: ["create_task"],
     },
@@ -141,6 +156,16 @@ Tools: create_task`,
       llmConfig: { provider: "anthropic", model: "claude-sonnet-4-6-20250514" },
       systemPrompt: CONTENT_SYSTEM_PROMPT,
       tools: ["read_file", "write_file", "post_to_slack", "request_approval", "http_request"],
+    },
+    {
+      id: `${tenantId}-content-video-creator`,
+      tenantId,
+      name: "Video Creator",
+      role: "worker",
+      department: "content",
+      llmConfig: { provider: "anthropic", model: "claude-sonnet-4-6-20250514" },
+      systemPrompt: CONTENT_SYSTEM_PROMPT,
+      tools: ["web_search", "read_file", "write_file", "http_request", "post_to_slack", "request_approval"],
     },
   ];
 }

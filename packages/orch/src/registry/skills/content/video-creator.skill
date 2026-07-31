@@ -1,0 +1,83 @@
+{
+  "name": "video-creator",
+  "description": "Generate AI video from a script or brief: break into clips, generate via fal.ai (LTX draft → Kling/Seedance final), stitch with Remotion, submit for HITL approval, then publish",
+  "steps": [
+    {
+      "action": "Load the source script or brief. If video_script_draft.md exists, read it. If no script, read the brief and extract: (1) one-sentence video promise, (2) target platform (YouTube 16:9 / TikTok 9:16 / LinkedIn 1:1), (3) target duration (15s / 30s / 60s / 3-5min), (4) brand visual style (product demo / talking-head / B-roll montage / motion-graphic). Research the topic via web_search to gather 3-5 visual reference points and trending visual styles for this niche.",
+      "tool": "read_file",
+      "args": { "filename": "video_script_draft.md" },
+      "expectedOutcome": "Script loaded with platform, duration, and style confirmed. Visual reference notes saved to video_brief.md."
+    },
+    {
+      "action": "Break the script into 3-12 clips. For each clip write: (a) clip_index (1, 2, ...), (b) duration_seconds (2-8s each), (c) type ('text_to_video' | 'image_to_video'), (d) prompt_positive — cinematic, specific (camera angle + subject + motion + lighting + style), (e) prompt_negative — 'blur, watermark, text overlay, low quality, distorted', (f) aspect_ratio ('16:9' | '9:16' | '1:1'). Total clip durations should sum to ±10% of target video duration. Save as clip_manifest.json.",
+      "tool": "write_file",
+      "args": { "filename": "clip_manifest.json" },
+      "expectedOutcome": "clip_manifest.json with 3-12 clip objects. Clip durations sum to target duration. Prompts are specific and platform-appropriate."
+    },
+    {
+      "action": "Generate DRAFT clips via fal.ai LTX-Video (fast, cheap preview). For each clip in clip_manifest.json, call http_request POST to https://fal.run/fal-ai/ltx-video with body: { prompt, negative_prompt, num_frames: Math.round(duration * 24), width: 1280, height: 720 }. Header: Authorization: Key {FAL_API_KEY}. Fal returns async — poll GET https://fal.run/fal-ai/ltx-video/{request_id} every 10s until status='COMPLETED'. Save each result URL to clip_manifest.json draft_url field. If a clip fails after 3 retries, log the error and skip that clip index.",
+      "tool": "http_request",
+      "args": { "method": "POST", "url": "https://fal.run/fal-ai/ltx-video" },
+      "expectedOutcome": "All clips have draft_url populated in clip_manifest.json. Any failed clips noted in clip_errors.json."
+    },
+    {
+      "action": "Quality review draft clips. For each clip: check the draft_url is accessible (http_request GET, expect 200). Read clip_manifest.json and evaluate if the prompt produced the intended visual — if a clip's description says 'SaaS dashboard interface with smooth scroll' but the draft URL suggests a mismatch, rewrite the prompt and regenerate that clip only (one retry per clip). Log quality notes in clip_review.md.",
+      "tool": "http_request",
+      "args": { "method": "GET" },
+      "expectedOutcome": "Each clip draft_url verified accessible. Problem clips regenerated once. clip_review.md lists pass/fail/retry per clip index."
+    },
+    {
+      "action": "Generate FINAL quality clips for approved clips via Kling 3.0 (best motion quality for B2B). For each clip in clip_manifest.json where draft is passing, call http_request POST to https://api.klingai.com/v1/videos/text2video with body: { prompt, negative_prompt, duration: String(clip.duration_seconds), aspect_ratio: clip.aspect_ratio, mode: 'pro' }. Header: Authorization: Bearer {KLING_API_KEY}. Poll GET https://api.klingai.com/v1/videos/text2video/{task_id} every 15s until status='succeed'. Save result video_url to clip_manifest.json final_url field. Fallback: if Kling errors, use fal.ai Seedance 2.0 at https://fal.run/fal-ai/seedance-v1-5/text-to-video.",
+      "tool": "http_request",
+      "args": { "method": "POST", "url": "https://api.klingai.com/v1/videos/text2video" },
+      "expectedOutcome": "All passing clips have final_url in clip_manifest.json. At least 80% of clips generated successfully."
+    },
+    {
+      "action": "Assemble clips into final video via Shotstack. Build a Shotstack render JSON: { timeline: { soundtrack: null, tracks: [{ clips: clip_manifest clips mapped to { asset: { type: 'video', src: final_url }, start: cumulative_offset, length: duration_seconds, transition: { in: 'fade', out: 'fade' } } }] }, output: { format: 'mp4', resolution: 'hd', aspectRatio: target_aspect_ratio } }. POST to https://api.shotstack.io/stage/render with header x-api-key: {SHOTSTACK_API_KEY}. Poll GET https://api.shotstack.io/stage/render/{renderId} until status='done'. Save render.url to video_output.json.",
+      "tool": "http_request",
+      "args": { "method": "POST", "url": "https://api.shotstack.io/stage/render" },
+      "expectedOutcome": "video_output.json contains final MP4 URL from Shotstack. Video is downloadable and playable."
+    },
+    {
+      "action": "Submit to Slack for human review before publishing. Read video_output.json and clip_review.md. post_to_slack to approval channel with message: platform, target duration, final MP4 URL, number of clips, providers used (LTX draft → Kling final), clip count that passed QC, and the task_id. Then request_approval with 24h timeout.",
+      "tool": "post_to_slack",
+      "expectedOutcome": "Slack message sent with video URL and metadata. HITL approval gate opened."
+    },
+    {
+      "action": "On APPROVED: publish via platform API. YouTube: POST to https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable with video file from render URL. TikTok: POST to https://open.tiktokapis.com/v2/post/publish/video/init/. LinkedIn: POST to https://api.linkedin.com/v2/assets?action=registerUpload then upload. On REJECTED: write rejection reason to video_rejected.md, post_to_slack rejection notice to the approval channel. Never publish without explicit approval.",
+      "tool": "http_request",
+      "expectedOutcome": "Video published to target platform with post ID saved to video_published.json. Or rejection logged and team notified via Slack."
+    }
+  ],
+  "preconditions": [
+    "video_script_draft.md exists OR a written brief is provided in the task description",
+    "Target platform specified (YouTube / TikTok / LinkedIn)",
+    "Target duration specified (15s / 30s / 60s / 3-5min)",
+    "FAL_API_KEY env var available for draft generation",
+    "KLING_API_KEY or SHOTSTACK_API_KEY env var available for final render",
+    "Slack approval channel configured"
+  ],
+  "successCriteria": [
+    "clip_manifest.json has 3+ clips with both draft_url and final_url populated",
+    "Final MP4 assembled and accessible via Shotstack render URL",
+    "Slack approval message sent with video URL before any publish action",
+    "No clip published without explicit HITL approval",
+    "video_published.json or video_rejected.md exists after completion"
+  ],
+  "checks": [
+    { "criterion": "clip_manifest.json exists with ≥3 clips", "type": "file_exists", "filename": "clip_manifest.json" },
+    { "criterion": "video_output.json exists with render URL", "type": "file_exists", "filename": "video_output.json" },
+    { "criterion": "Approval requested before publish", "type": "human_review" },
+    { "criterion": "Outcome file exists (published or rejected)", "type": "human_review" }
+  ],
+  "providerStack": {
+    "draft": "fal-ai/ltx-video via @fal-ai/client — ~$0.004-0.005/s, fast iteration",
+    "final": "Kling 3.0 via klingai API — best motion quality for B2B product footage",
+    "fallback": "fal-ai/seedance-v1-5 — temporal consistency, 1080p",
+    "assembly": "Shotstack render API — MP4 stitching with fade transitions",
+    "sdkReference": "ai (Vercel AI SDK v7) experimental_generateVideo — provider-agnostic wrapper",
+    "notes": "vargHQ/sdk (@varg/sdk, 2026) provides JSX-for-videos declarative API on top of Vercel AI SDK — consider for future Remotion-based assembly pipeline"
+  },
+  "compiledFrom": "vercel/ai@experimental_generateVideo + fal-ai-community/video-starter-kit@2400stars + remotion-dev/remotion@43500stars + vargHQ/sdk@agent-skills",
+  "compiledAt": "2026-07-31T00:00:00.000Z"
+}
